@@ -10,19 +10,43 @@ on:
 permissions:
   contents: read
 
+env:
+  PESTER_VERSION: '5.9.0'
+  PSSCRIPTANALYZER_VERSION: '1.25.0'
+
 jobs:
   static-analysis:
     name: Static analysis
     runs-on: windows-latest
+    timeout-minutes: 15
+
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Install PSScriptAnalyzer
         shell: pwsh
         run: |
-          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
-          Install-Module PSScriptAnalyzer -Scope CurrentUser -Force
+          $ErrorActionPreference = 'Stop'
+
+          Set-PSRepository `
+            -Name PSGallery `
+            -InstallationPolicy Trusted
+
+          Install-Module `
+            -Name PSScriptAnalyzer `
+            -RequiredVersion $env:PSSCRIPTANALYZER_VERSION `
+            -Scope CurrentUser `
+            -Force `
+            -AllowClobber
+
+          Import-Module `
+            -Name PSScriptAnalyzer `
+            -RequiredVersion $env:PSSCRIPTANALYZER_VERSION `
+            -Force `
+            -ErrorAction Stop
+
+          Write-Host "PSScriptAnalyzer version: $((Get-Module PSScriptAnalyzer).Version)"
 
       - name: Run PSScriptAnalyzer
         shell: pwsh
@@ -31,21 +55,47 @@ jobs:
   test:
     name: Pester / ${{ matrix.shell }}
     runs-on: windows-latest
+    timeout-minutes: 30
+
     strategy:
       fail-fast: false
       matrix:
         shell:
           - powershell
           - pwsh
+
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Install Pester
         shell: ${{ matrix.shell }}
         run: |
-          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
-          Install-Module Pester -MinimumVersion 5.5.0 -Scope CurrentUser -Force -SkipPublisherCheck
+          $ErrorActionPreference = 'Stop'
+
+          if ($PSVersionTable.PSEdition -eq 'Desktop') {
+              [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+          }
+
+          Set-PSRepository `
+            -Name PSGallery `
+            -InstallationPolicy Trusted
+
+          Install-Module `
+            -Name Pester `
+            -RequiredVersion $env:PESTER_VERSION `
+            -Scope CurrentUser `
+            -Force `
+            -SkipPublisherCheck `
+            -AllowClobber
+
+          Import-Module `
+            -Name Pester `
+            -RequiredVersion $env:PESTER_VERSION `
+            -Force `
+            -ErrorAction Stop
+
+          Write-Host "Pester version: $((Get-Module Pester).Version)"
 
       - name: Run Pester
         shell: ${{ matrix.shell }}
@@ -53,8 +103,9 @@ jobs:
 
       - name: Upload test results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: test-results-${{ matrix.shell }}
           path: out/TestResults-*.xml
           if-no-files-found: warn
+          retention-days: 14

@@ -2,6 +2,17 @@
 
 All notable changes to Incident Capsule are documented in this file. The project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- Pinned Pester 5.9.0 and PSScriptAnalyzer 1.25.0 for deterministic builds.
+- Explicitly import the required build-tool versions.
+- Upgraded GitHub checkout and artifact-upload actions to version 7.
+- Removed Dependabot label assumptions for repositories without custom labels.
+- Treat PSScriptAnalyzer parse errors as blocking build failures.
+- Added stricter release-asset and native-command validation.
+
 ## [1.0.0] - 2026-07-12
 
 ### Added

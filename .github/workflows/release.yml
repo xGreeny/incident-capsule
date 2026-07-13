@@ -8,21 +8,64 @@ on:
 permissions:
   contents: write
 
+env:
+  PESTER_VERSION: '5.9.0'
+  PSSCRIPTANALYZER_VERSION: '1.25.0'
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   release:
+    name: Validate, package and release
     runs-on: windows-latest
+    timeout-minutes: 30
+
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Install build dependencies
         shell: pwsh
         run: |
-          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
-          Install-Module Pester -MinimumVersion 5.5.0 -Scope CurrentUser -Force -SkipPublisherCheck
-          Install-Module PSScriptAnalyzer -Scope CurrentUser -Force
+          $ErrorActionPreference = 'Stop'
+
+          Set-PSRepository `
+            -Name PSGallery `
+            -InstallationPolicy Trusted
+
+          Install-Module `
+            -Name Pester `
+            -RequiredVersion $env:PESTER_VERSION `
+            -Scope CurrentUser `
+            -Force `
+            -SkipPublisherCheck `
+            -AllowClobber
+
+          Install-Module `
+            -Name PSScriptAnalyzer `
+            -RequiredVersion $env:PSSCRIPTANALYZER_VERSION `
+            -Scope CurrentUser `
+            -Force `
+            -AllowClobber
+
+          Import-Module `
+            -Name Pester `
+            -RequiredVersion $env:PESTER_VERSION `
+            -Force `
+            -ErrorAction Stop
+
+          Import-Module `
+            -Name PSScriptAnalyzer `
+            -RequiredVersion $env:PSSCRIPTANALYZER_VERSION `
+            -Force `
+            -ErrorAction Stop
+
+          Write-Host "Pester version: $((Get-Module Pester).Version)"
+          Write-Host "PSScriptAnalyzer version: $((Get-Module PSScriptAnalyzer).Version)"
 
       - name: Validate and package
         shell: pwsh
@@ -31,23 +74,79 @@ jobs:
       - name: Verify tag matches module version
         shell: pwsh
         run: |
-          $manifest = Test-ModuleManifest ./src/IncidentCapsule/IncidentCapsule.psd1
-          $expected = "v$($manifest.Version)"
-          if ($env:GITHUB_REF_NAME -ne $expected) {
-              throw "Tag '$env:GITHUB_REF_NAME' does not match module version '$expected'."
+          $ErrorActionPreference = 'Stop'
+
+          $manifest = Test-ModuleManifest `
+            -Path ./src/IncidentCapsule/IncidentCapsule.psd1 `
+            -ErrorAction Stop
+
+          $expectedTag = "v$($manifest.Version)"
+
+          if ($env:GITHUB_REF_NAME -ne $expectedTag) {
+              throw "Tag '$env:GITHUB_REF_NAME' does not match module version '$expectedTag'."
           }
+
+          Write-Host "Release tag matches module version: $expectedTag"
+
+      - name: Validate release assets
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          $archives = @(
+              Get-ChildItem `
+                -Path ./out/incident-capsule-*.zip `
+                -File `
+                -ErrorAction Stop
+          )
+
+          $checksums = @(
+              Get-ChildItem `
+                -Path ./out/incident-capsule-*.zip.sha256 `
+                -File `
+                -ErrorAction Stop
+          )
+
+          if ($archives.Count -ne 1) {
+              throw "Expected exactly one release archive, found $($archives.Count)."
+          }
+
+          if ($checksums.Count -ne 1) {
+              throw "Expected exactly one checksum file, found $($checksums.Count)."
+          }
+
+          Write-Host "Archive: $($archives[0].Name)"
+          Write-Host "Checksum: $($checksums[0].Name)"
 
       - name: Create or update GitHub release
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          $ErrorActionPreference = 'Stop'
+
           $tag = $env:GITHUB_REF_NAME
-          $assets = Get-ChildItem ./out/incident-capsule-*.zip, ./out/incident-capsule-*.zip.sha256
+          $assetPaths = @(
+              Get-ChildItem `
+                -Path ./out/incident-capsule-*.zip, ./out/incident-capsule-*.zip.sha256 `
+                -File |
+              Sort-Object FullName |
+              Select-Object -ExpandProperty FullName
+          )
+
           gh release view $tag 2>$null
+
           if ($LASTEXITCODE -eq 0) {
-              gh release upload $tag $assets.FullName --clobber
+              gh release upload $tag @assetPaths --clobber
           }
           else {
-              gh release create $tag $assets.FullName --generate-notes --title $tag
+              gh release create `
+                $tag `
+                @assetPaths `
+                --generate-notes `
+                --title $tag
+          }
+
+          if ($LASTEXITCODE -ne 0) {
+              throw "GitHub release command failed with exit code $LASTEXITCODE."
           }

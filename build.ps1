@@ -13,6 +13,52 @@ $moduleManifest = Join-Path $PSScriptRoot 'src/IncidentCapsule/IncidentCapsule.p
 $testPath = Join-Path $PSScriptRoot 'tests'
 $analyzerSettings = Join-Path $PSScriptRoot '.config/PSScriptAnalyzerSettings.psd1'
 
+$requiredPesterVersion = [version]'5.9.0'
+$requiredPSScriptAnalyzerVersion = [version]'1.25.0'
+
+function Import-RequiredBuildModule {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [ValidateNotNullOrEmpty()]
+        [string]$Name,
+
+        [Parameter(Mandatory)]
+        [version]$RequiredVersion
+    )
+
+    $availableModule = Get-Module -ListAvailable -Name $Name |
+        Where-Object { $_.Version -eq $RequiredVersion } |
+        Select-Object -First 1
+
+    if ($null -eq $availableModule) {
+        throw (
+            "{0} {1} is required. Run: " +
+            "Install-Module {0} -RequiredVersion {1} -Scope CurrentUser"
+        ) -f $Name, $RequiredVersion
+    }
+
+    Remove-Module `
+        -Name $Name `
+        -Force `
+        -ErrorAction SilentlyContinue
+
+    Import-Module `
+        -Name $Name `
+        -RequiredVersion $RequiredVersion `
+        -Force `
+        -ErrorAction Stop
+
+    $loadedModule = Get-Module -Name $Name |
+        Select-Object -First 1
+
+    if ($null -eq $loadedModule -or $loadedModule.Version -ne $RequiredVersion) {
+        throw (
+            "Failed to load {0} {1}. Loaded version: {2}"
+        ) -f $Name, $RequiredVersion, $loadedModule.Version
+    }
+}
+
 function Remove-BuildOutput {
     if (Test-Path -LiteralPath $OutputPath) {
         Remove-Item -LiteralPath $OutputPath -Recurse -Force
@@ -22,40 +68,74 @@ function Remove-BuildOutput {
 }
 
 function Invoke-StaticAnalysis {
-    if (-not (Get-Module -ListAvailable -Name PSScriptAnalyzer)) {
-        throw 'PSScriptAnalyzer is not installed. Install-Module PSScriptAnalyzer -Scope CurrentUser'
-    }
+    Import-RequiredBuildModule `
+        -Name 'PSScriptAnalyzer' `
+        -RequiredVersion $requiredPSScriptAnalyzerVersion
 
     $paths = @(
-        Join-Path $PSScriptRoot 'src'
-        Join-Path $PSScriptRoot 'tools'
-        Join-Path $PSScriptRoot 'tests'
-        Join-Path $PSScriptRoot 'build.ps1'
+        (Join-Path $PSScriptRoot 'src')
+        (Join-Path $PSScriptRoot 'tools')
+        (Join-Path $PSScriptRoot 'tests')
+        (Join-Path $PSScriptRoot 'build.ps1')
     )
 
     $issues = @()
+
     foreach ($path in $paths) {
-        if (Test-Path -LiteralPath $path) {
-            $issues += Invoke-ScriptAnalyzer -Path $path -Recurse -Settings $analyzerSettings
+        if (-not (Test-Path -LiteralPath $path)) {
+            continue
         }
+
+        $item = Get-Item -LiteralPath $path -ErrorAction Stop
+
+        $analyzerParameters = @{
+            Path        = $item.FullName
+            Settings    = $analyzerSettings
+            ErrorAction = 'Stop'
+        }
+
+        if ($item.PSIsContainer) {
+            $analyzerParameters['Recurse'] = $true
+        }
+
+        $issues += Invoke-ScriptAnalyzer @analyzerParameters
     }
 
     if ($issues.Count -gt 0) {
-        $issues | Sort-Object ScriptName, Line | Format-Table Severity, RuleName, ScriptName, Line, Message -AutoSize
+        $issues |
+            Sort-Object ScriptName, Line |
+            Format-Table `
+                Severity,
+                RuleName,
+                ScriptName,
+                Line,
+                Message `
+                -AutoSize
     }
 
-    $errors = @($issues | Where-Object Severity -eq 'Error')
-    if ($errors.Count -gt 0) {
-        throw "PSScriptAnalyzer reported $($errors.Count) error(s)."
+    $blockingIssues = @(
+        $issues |
+            Where-Object {
+                @('Error', 'ParseError') -contains [string]$_.Severity
+            }
+    )
+
+    if ($blockingIssues.Count -gt 0) {
+        throw (
+            "PSScriptAnalyzer reported {0} blocking issue(s)."
+        ) -f $blockingIssues.Count
     }
 }
 
 function Invoke-RepositoryTests {
-    if (-not (Get-Module -ListAvailable -Name Pester | Where-Object Version -ge ([version]'5.5.0'))) {
-        throw 'Pester 5.5.0 or newer is required. Install-Module Pester -MinimumVersion 5.5.0 -Scope CurrentUser'
-    }
+    Import-RequiredBuildModule `
+        -Name 'Pester' `
+        -RequiredVersion $requiredPesterVersion
 
-    $resultFile = Join-Path $OutputPath ("TestResults-{0}.xml" -f $PSVersionTable.PSEdition)
+    $resultFile = Join-Path `
+        $OutputPath `
+        ("TestResults-{0}.xml" -f $PSVersionTable.PSEdition)
+
     $configuration = New-PesterConfiguration
     $configuration.Run.Path = $testPath
     $configuration.Run.PassThru = $true
@@ -65,8 +145,13 @@ function Invoke-RepositoryTests {
     $configuration.TestResult.OutputFormat = 'NUnitXml'
 
     $result = Invoke-Pester -Configuration $configuration
+
     if ($result.FailedCount -gt 0) {
         throw "Pester reported $($result.FailedCount) failed test(s)."
+    }
+
+    if ($result.Result -ne 'Passed') {
+        throw "Pester completed with result '$($result.Result)'."
     }
 }
 
