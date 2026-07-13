@@ -1,8 +1,7 @@
-BeforeAll {
-    $repositoryRoot = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
-    Import-Module (Join-Path $repositoryRoot 'src/IncidentCapsule/IncidentCapsule.psd1') -Force
-    $isWindowsHost = $env:OS -eq 'Windows_NT'
-}
+$repositoryRoot = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
+$moduleManifest = Join-Path $repositoryRoot 'src/IncidentCapsule/IncidentCapsule.psd1'
+Import-Module $moduleManifest -Force -ErrorAction Stop
+$isWindowsHost = $env:OS -eq 'Windows_NT'
 
 Describe 'Incident Capsule collection smoke test' -Skip:(-not $isWindowsHost) {
     It 'creates a valid focused directory capsule' {
