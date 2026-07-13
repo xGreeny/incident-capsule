@@ -52,30 +52,20 @@ jobs:
         shell: pwsh
         run: ./build.ps1 -Task Analyze
 
-  test:
-    name: Pester / ${{ matrix.shell }}
+  test-windows-powershell:
+    name: Pester / Windows PowerShell 5.1
     runs-on: windows-latest
     timeout-minutes: 30
-
-    strategy:
-      fail-fast: false
-      matrix:
-        shell:
-          - powershell
-          - pwsh
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
 
       - name: Install Pester
-        shell: ${{ matrix.shell }}
+        shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
-
-          if ($PSVersionTable.PSEdition -eq 'Desktop') {
-              [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-          }
+          [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
           Set-PSRepository `
             -Name PSGallery `
@@ -98,14 +88,61 @@ jobs:
           Write-Host "Pester version: $((Get-Module Pester).Version)"
 
       - name: Run Pester
-        shell: ${{ matrix.shell }}
+        shell: powershell
         run: ./build.ps1 -Task Test
 
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: test-results-${{ matrix.shell }}
+          name: test-results-windows-powershell
+          path: out/TestResults-*.xml
+          if-no-files-found: warn
+          retention-days: 14
+
+  test-pwsh:
+    name: Pester / PowerShell 7
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Install Pester
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          Set-PSRepository `
+            -Name PSGallery `
+            -InstallationPolicy Trusted
+
+          Install-Module `
+            -Name Pester `
+            -RequiredVersion $env:PESTER_VERSION `
+            -Scope CurrentUser `
+            -Force `
+            -SkipPublisherCheck `
+            -AllowClobber
+
+          Import-Module `
+            -Name Pester `
+            -RequiredVersion $env:PESTER_VERSION `
+            -Force `
+            -ErrorAction Stop
+
+          Write-Host "Pester version: $((Get-Module Pester).Version)"
+
+      - name: Run Pester
+        shell: pwsh
+        run: ./build.ps1 -Task Test
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results-pwsh
           path: out/TestResults-*.xml
           if-no-files-found: warn
           retention-days: 14
