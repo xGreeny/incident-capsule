@@ -1,0 +1,38 @@
+name: Feature request
+description: Propose a bounded collector, report, integrity, or workflow improvement.
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Operational problem
+      description: Explain the first-response gap this solves.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Proposed evidence and source
+      description: Identify the Windows API, cmdlet, CIM class, event channel, registry location, or inbox utility.
+    validations:
+      required: true
+  - type: textarea
+    id: boundaries
+    attributes:
+      label: Scope and bounds
+      description: Describe privilege requirements, runtime/storage limits, privacy impact, and failure behavior.
+    validations:
+      required: true
+  - type: checkboxes
+    id: constraints
+    attributes:
+      label: Design constraints
+      options:
+        - label: The proposal is local and read-only.
+          required: true
+        - label: The proposal can be tested without committing real incident data.
+          required: true
+        - label: The proposal does not duplicate full-disk, memory, or EDR acquisition.
+          required: true

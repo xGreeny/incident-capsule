@@ -1,0 +1,77 @@
+name: Bug report
+description: Report a reproducible defect using sanitized information.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not attach a real capsule, EVTX file, event message, hostname, username, IP address, or customer identifier.
+  - type: input
+    id: version
+    attributes:
+      label: Incident Capsule version
+      placeholder: 1.0.0
+    validations:
+      required: true
+  - type: input
+    id: windows
+    attributes:
+      label: Windows edition and build
+      placeholder: Windows Server 2022, build 20348
+    validations:
+      required: true
+  - type: input
+    id: powershell
+    attributes:
+      label: PowerShell version
+      placeholder: Windows PowerShell 5.1 or PowerShell 7.x
+    validations:
+      required: true
+  - type: dropdown
+    id: profile
+    attributes:
+      label: Profile
+      options:
+        - Minimal
+        - Standard
+        - Extended
+        - Custom collector selection
+    validations:
+      required: true
+  - type: input
+    id: collector
+    attributes:
+      label: Affected collector or command
+      placeholder: EventLogs / Test-IncidentCapsuleIntegrity
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Observed behavior
+      description: Use synthetic values and sanitize all operational data.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction
+      description: Provide the smallest safe command and sanitized error.
+      render: powershell
+    validations:
+      required: true
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety confirmation
+      options:
+        - label: I removed all real incident evidence, identities, addresses, domains, and secrets.
+          required: true

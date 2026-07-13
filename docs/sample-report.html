@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Incident Capsule // Synthetic report</title>
+<style>
+:root{color-scheme:dark;--bg:#071015;--panel:#0d1820;--line:#20343f;--text:#d7e5e7;--muted:#7f9aa2;--green:#68f0ae;--cyan:#65d9ff;--amber:#ffcc66;--red:#ff6b7a}*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 20% 0,#102631 0,transparent 35%),var(--bg);color:var(--text);font:14px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace}.wrap{max-width:1180px;margin:auto;padding:32px}.hero,.panel,.card{border:1px solid var(--line);background:rgba(13,24,32,.94);box-shadow:0 18px 70px rgba(0,0,0,.24)}.hero{padding:26px;border-top:3px solid var(--green)}h1{margin:0;color:var(--green);letter-spacing:.08em;font-size:28px}.sub{color:var(--muted);margin-top:6px}.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:18px 0}.card{padding:16px}.k{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.12em}.v{font-size:20px;margin-top:5px}.ok{color:var(--green)}.warn{color:var(--amber)}.panel{padding:18px;margin-top:14px}h2{font-size:15px;color:var(--cyan);margin:0 0 12px}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:10px;border-bottom:1px solid var(--line)}th{color:var(--muted);font-weight:500}.pill{display:inline-block;border:1px solid currentColor;padding:2px 8px;border-radius:999px;font-size:11px}.footer{color:var(--muted);margin-top:18px}@media(max-width:800px){.grid{grid-template-columns:1fr 1fr}}@media(max-width:520px){.grid{grid-template-columns:1fr}.wrap{padding:14px}}
+</style>
+</head>
+<body><main class="wrap">
+<section class="hero"><h1>INCIDENT CAPSULE</h1><div class="sub">Synthetic report sample — no production data</div></section>
+<div class="grid">
+<div class="card"><div class="k">Case</div><div class="v">IR-DEMO-0042</div></div>
+<div class="card"><div class="k">Host</div><div class="v">WIN-IR-DEMO</div></div>
+<div class="card"><div class="k">Profile</div><div class="v">Standard</div></div>
+<div class="card"><div class="k">Status</div><div class="v ok">COMPLETED</div></div>
+</div>
+<section class="panel"><h2>COLLECTION STATUS</h2><table><thead><tr><th>Collector</th><th>Status</th><th>Duration</th><th>Evidence</th></tr></thead><tbody>
+<tr><td>System</td><td><span class="pill ok">Succeeded</span></td><td>0.4 s</td><td>3 files</td></tr>
+<tr><td>Processes</td><td><span class="pill ok">Succeeded</span></td><td>1.7 s</td><td>2 files</td></tr>
+<tr><td>Defender</td><td><span class="pill warn">Partial</span></td><td>0.8 s</td><td>2 files</td></tr>
+<tr><td>EventLogs</td><td><span class="pill ok">Succeeded</span></td><td>8.9 s</td><td>19 files</td></tr>
+</tbody></table></section>
+<section class="panel"><h2>HOST SNAPSHOT</h2><table><tbody>
+<tr><th>Running processes</th><td>146</td><th>Listening TCP endpoints</th><td>18</td></tr>
+<tr><th>Services</th><td>287</td><th>Loaded profiles</th><td>3</td></tr>
+<tr><th>Defender real-time protection</th><td class="ok">Enabled</td><th>Decoded events</th><td>2,418</td></tr>
+</tbody></table></section>
+<section class="panel"><h2>WARNINGS</h2><p><span class="warn">Defender:</span> threat history provider returned access denied; status and preference evidence were preserved.</p></section>
+<div class="footer">SHA-256 manifest: metadata/manifest.json · Report generated offline by Incident Capsule 1.0.0</div>
+</main></body></html>

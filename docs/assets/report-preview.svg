@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="620" viewBox="0 0 1200 620" role="img" aria-labelledby="title desc">
+<title id="title">Synthetic Incident Capsule report preview</title>
+<desc id="desc">Dark offline response report with case metadata, collector states, host metrics, and warnings.</desc>
+<defs>
+  <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0f2630"/><stop offset=".45" stop-color="#071015"/><stop offset="1" stop-color="#071015"/></linearGradient>
+  <filter id="shadow"><feDropShadow dx="0" dy="12" stdDeviation="16" flood-opacity=".32"/></filter>
+</defs>
+<rect width="1200" height="620" rx="18" fill="url(#bg)"/>
+<g font-family="Consolas, ui-monospace, monospace">
+  <rect x="42" y="38" width="1116" height="92" rx="8" fill="#0d1820" stroke="#29414d" filter="url(#shadow)"/>
+  <rect x="42" y="38" width="1116" height="4" rx="2" fill="#68f0ae"/>
+  <text x="72" y="84" font-size="28" font-weight="700" letter-spacing="3" fill="#68f0ae">INCIDENT CAPSULE</text>
+  <text x="72" y="111" font-size="14" fill="#7f9aa2">WINDOWS FIRST-RESPONSE COLLECTION // OFFLINE REPORT</text>
+  <g>
+    <rect x="42" y="150" width="264" height="92" rx="8" fill="#0d1820" stroke="#20343f"/>
+    <text x="62" y="181" font-size="12" fill="#7f9aa2">CASE</text><text x="62" y="218" font-size="21" fill="#d7e5e7">IR-DEMO-0042</text>
+    <rect x="326" y="150" width="264" height="92" rx="8" fill="#0d1820" stroke="#20343f"/>
+    <text x="346" y="181" font-size="12" fill="#7f9aa2">HOST</text><text x="346" y="218" font-size="21" fill="#d7e5e7">WIN-IR-DEMO</text>
+    <rect x="610" y="150" width="264" height="92" rx="8" fill="#0d1820" stroke="#20343f"/>
+    <text x="630" y="181" font-size="12" fill="#7f9aa2">PROFILE</text><text x="630" y="218" font-size="21" fill="#d7e5e7">STANDARD</text>
+    <rect x="894" y="150" width="264" height="92" rx="8" fill="#0d1820" stroke="#20343f"/>
+    <text x="914" y="181" font-size="12" fill="#7f9aa2">STATUS</text><text x="914" y="218" font-size="21" fill="#68f0ae">COMPLETED</text>
+  </g>
+  <rect x="42" y="264" width="690" height="300" rx="8" fill="#0d1820" stroke="#20343f"/>
+  <text x="66" y="299" font-size="14" font-weight="700" fill="#65d9ff">COLLECTION STATUS</text>
+  <line x1="66" y1="319" x2="708" y2="319" stroke="#20343f"/>
+  <text x="68" y="346" font-size="12" fill="#7f9aa2">COLLECTOR</text><text x="334" y="346" font-size="12" fill="#7f9aa2">STATE</text><text x="500" y="346" font-size="12" fill="#7f9aa2">DURATION</text><text x="630" y="346" font-size="12" fill="#7f9aa2">FILES</text>
+  <g font-size="14" fill="#d7e5e7">
+    <text x="68" y="385">System</text><text x="334" y="385" fill="#68f0ae">Succeeded</text><text x="500" y="385">0.4 s</text><text x="650" y="385">3</text>
+    <line x1="66" y1="399" x2="708" y2="399" stroke="#172a34"/>
+    <text x="68" y="429">Processes</text><text x="334" y="429" fill="#68f0ae">Succeeded</text><text x="500" y="429">1.7 s</text><text x="650" y="429">2</text>
+    <line x1="66" y1="443" x2="708" y2="443" stroke="#172a34"/>
+    <text x="68" y="473">Defender</text><text x="334" y="473" fill="#ffcc66">Partial</text><text x="500" y="473">0.8 s</text><text x="650" y="473">2</text>
+    <line x1="66" y1="487" x2="708" y2="487" stroke="#172a34"/>
+    <text x="68" y="517">EventLogs</text><text x="334" y="517" fill="#68f0ae">Succeeded</text><text x="500" y="517">8.9 s</text><text x="650" y="517">19</text>
+  </g>
+  <rect x="752" y="264" width="406" height="174" rx="8" fill="#0d1820" stroke="#20343f"/>
+  <text x="776" y="299" font-size="14" font-weight="700" fill="#65d9ff">HOST SNAPSHOT</text>
+  <text x="776" y="337" font-size="12" fill="#7f9aa2">PROCESSES</text><text x="1080" y="337" text-anchor="end" font-size="20" fill="#d7e5e7">146</text>
+  <text x="776" y="377" font-size="12" fill="#7f9aa2">LISTENING TCP</text><text x="1080" y="377" text-anchor="end" font-size="20" fill="#d7e5e7">18</text>
+  <text x="776" y="417" font-size="12" fill="#7f9aa2">DEFENDER RTP</text><text x="1080" y="417" text-anchor="end" font-size="18" fill="#68f0ae">ENABLED</text>
+  <rect x="752" y="458" width="406" height="106" rx="8" fill="#0d1820" stroke="#20343f"/>
+  <text x="776" y="493" font-size="14" font-weight="700" fill="#65d9ff">INTEGRITY</text>
+  <text x="776" y="528" font-size="13" fill="#7f9aa2">SHA-256 manifest</text><text x="1118" y="528" text-anchor="end" font-size="14" fill="#68f0ae">READY</text>
+</g>
+</svg>

@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/xGreeny/incident-capsule/v1.0.0/docs/schemas/manifest.schema.json",
+  "title": "Incident Capsule file manifest",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "capsuleId",
+    "algorithm",
+    "createdAtUtc",
+    "files"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "schemaVersion": {
+      "const": "1.0"
+    },
+    "capsuleId": {
+      "type": "string"
+    },
+    "algorithm": {
+      "const": "SHA-256"
+    },
+    "createdAtUtc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "path",
+          "length",
+          "lastWriteTimeUtc",
+          "sha256"
+        ],
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "length": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "lastWriteTimeUtc": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

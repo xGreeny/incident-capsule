@@ -1,0 +1,21 @@
+# Build and test output
+/out/
+/coverage/
+/TestResults*.xml
+*.trx
+
+# Collected evidence and archives
+IncidentCapsule_*/
+IC_*/
+*.evtx
+*.zip
+*.sha256
+
+# PowerShell tooling
+.vscode/.ropeproject/
+*.psses
+
+# Operating-system metadata
+.DS_Store
+Thumbs.db
+Desktop.ini

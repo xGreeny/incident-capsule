@@ -1,0 +1,53 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install build dependencies
+        shell: pwsh
+        run: |
+          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+          Install-Module Pester -MinimumVersion 5.5.0 -Scope CurrentUser -Force -SkipPublisherCheck
+          Install-Module PSScriptAnalyzer -Scope CurrentUser -Force
+
+      - name: Validate and package
+        shell: pwsh
+        run: ./build.ps1 -Task All
+
+      - name: Verify tag matches module version
+        shell: pwsh
+        run: |
+          $manifest = Test-ModuleManifest ./src/IncidentCapsule/IncidentCapsule.psd1
+          $expected = "v$($manifest.Version)"
+          if ($env:GITHUB_REF_NAME -ne $expected) {
+              throw "Tag '$env:GITHUB_REF_NAME' does not match module version '$expected'."
+          }
+
+      - name: Create or update GitHub release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = $env:GITHUB_REF_NAME
+          $assets = Get-ChildItem ./out/incident-capsule-*.zip, ./out/incident-capsule-*.zip.sha256
+          gh release view $tag 2>$null
+          if ($LASTEXITCODE -eq 0) {
+              gh release upload $tag $assets.FullName --clobber
+          }
+          else {
+              gh release create $tag $assets.FullName --generate-notes --title $tag
+          }

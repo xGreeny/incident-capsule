@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  static-analysis:
+    name: Static analysis
+    runs-on: windows-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+          Install-Module PSScriptAnalyzer -Scope CurrentUser -Force
+
+      - name: Run PSScriptAnalyzer
+        shell: pwsh
+        run: ./build.ps1 -Task Analyze
+
+  test:
+    name: Pester / ${{ matrix.shell }}
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shell:
+          - powershell
+          - pwsh
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Pester
+        shell: ${{ matrix.shell }}
+        run: |
+          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+          Install-Module Pester -MinimumVersion 5.5.0 -Scope CurrentUser -Force -SkipPublisherCheck
+
+      - name: Run Pester
+        shell: ${{ matrix.shell }}
+        run: ./build.ps1 -Task Test
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.shell }}
+          path: out/TestResults-*.xml
+          if-no-files-found: warn
