@@ -1,7 +1,6 @@
-BeforeAll {
-    $repositoryRoot = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
-    Import-Module (Join-Path $repositoryRoot 'src/IncidentCapsule/IncidentCapsule.psd1') -Force
-}
+$repositoryRoot = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
+$moduleManifest = Join-Path $repositoryRoot 'src/IncidentCapsule/IncidentCapsule.psd1'
+Import-Module $moduleManifest -Force -ErrorAction Stop
 
 Describe 'Incident Capsule configuration' {
     InModuleScope IncidentCapsule {
