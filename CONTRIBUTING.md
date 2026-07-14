@@ -15,18 +15,24 @@ Incident Capsule favors transparent, reviewable collection over broad but opaque
 ## Development setup
 
 ```powershell
-Install-Module Pester -MinimumVersion 5.5.0 -Scope CurrentUser
-Install-Module PSScriptAnalyzer -Scope CurrentUser
+Install-Module Pester -RequiredVersion 5.9.0 -Scope CurrentUser -Force -SkipPublisherCheck
+Install-Module PSScriptAnalyzer -RequiredVersion 1.25.0 -Scope CurrentUser -Force
 
 ./build.ps1 -Task Analyze
 ./build.ps1 -Task Test
 ```
+
+The versions above are the build contract used by CI. The build imports those exact versions and fails with an installation command when either is unavailable. Analyzer warnings that predate v1.1 are recorded as reviewed fingerprints in `.config/PSScriptAnalyzerBaseline.psd1`; a new warning or error fails the build. Do not broaden the baseline to make a change pass. Resolve new findings, or document and add an individual fingerprint as part of an explicit review.
 
 A full local validation and release package can be produced with:
 
 ```powershell
 ./build.ps1 -Task All
 ```
+
+The `Package` task is intentionally more than archive creation. It validates manifest, runtime, and changelog versions; verifies the generated SHA-256 sidecar; extracts the ZIP into a new temporary directory; then imports the packaged module and runs its launcher in both Windows PowerShell 5.1 and PowerShell 7. Both engines must therefore be installed on a Windows development machine.
+
+For a tagged release, the workflow additionally supplies the tag to the same version check. A release tag must be exactly `v<ModuleVersion>`. The validation job creates provenance attestations without release-write access; a separate least-privilege job publishes a new release. Existing release assets are never overwritten.
 
 ## Collector contract
 
@@ -43,7 +49,8 @@ Collectors must write through the repository's evidence helpers so that files us
 ## Pull-request checklist
 
 - Pester passes in Windows PowerShell 5.1 and PowerShell 7.
-- PSScriptAnalyzer reports no errors.
+- PSScriptAnalyzer reports no errors or warnings outside the reviewed baseline.
+- `./build.ps1 -Task Package` passes the extracted-package smoke test in both PowerShell editions.
 - No production evidence, customer identifiers, secrets, or real incident data is committed.
 - New output is documented, bounded, and justified.
 - Elevated and non-elevated behavior is considered.

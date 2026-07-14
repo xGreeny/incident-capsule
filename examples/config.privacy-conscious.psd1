@@ -1,4 +1,7 @@
 @{
+    DataHandlingProfile        = 'Minimized'
+    MaximumCapsuleBytes        = 2147483648
+    MaximumTimelineEntries     = 5000
     EventLookbackHours         = 12
     MaximumEventsPerLog        = 250
     ExportEvtx                 = $false

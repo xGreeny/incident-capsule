@@ -60,8 +60,28 @@ For a trusted, downloaded release, inspect the files and use the organization's 
 
 ```powershell
 Get-ChildItem .\incident-capsule -Recurse -File | Unblock-File
-Import-Module .\incident-capsule\src\IncidentCapsule\IncidentCapsule.psd1
+Import-Module .\incident-capsule\IncidentCapsule\IncidentCapsule.psd1
 ```
+
+The path above is for an extracted release. In a source checkout, use `src\IncidentCapsule\IncidentCapsule.psd1`. The root-level `Invoke-IncidentCapsule.ps1` launcher detects both layouts and reports every searched path if the module is missing.
+
+## The package smoke test fails
+
+Run `./build.ps1 -Task Package` on Windows with both Windows PowerShell 5.1 and PowerShell 7 (`pwsh.exe`) installed. The task deliberately tests the extracted ZIP, not the source tree. It checks the sidecar hash, package root name, module version, import path, launcher, focused System collection, and generated capsule integrity.
+
+Common causes include:
+
+- `pwsh.exe` is not on `PATH`;
+- endpoint protection blocks scripts extracted beneath the temporary directory;
+- the package launcher or module directory was renamed inside the staging tree;
+- `ModuleVersion`, `$script:ICVersion`, and the matching changelog heading disagree;
+- a tag was supplied that is not exactly `v<ModuleVersion>`.
+
+Do not publish an archive by bypassing this test. Correct the environment or package layout and rebuild from a clean `out` directory.
+
+## A tagged release workflow refuses to overwrite a release
+
+Release assets are immutable by design. If the tag already has a GitHub release, the workflow stops instead of using `--clobber`. Correct the version, create a new tag, and rebuild. Published assets also receive a GitHub artifact attestation; verify it with a current GitHub CLI using `gh attestation verify <archive> --repo xGreeny/incident-capsule`.
 
 ## Report links do not open from the ZIP viewer
 

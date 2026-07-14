@@ -22,6 +22,12 @@ ExcludeCollector removes names
 | `EventLogs` | `string[]` | Event channels queried by the EventLogs collector |
 | `EventLookbackHours` | positive integer | Time window for event summaries and EVTX query |
 | `MaximumEventsPerLog` | positive integer | Maximum decoded events written per channel |
+| `MaximumCapsuleBytes` | positive integer | Stop launching additional collectors once the working capsule reaches this size |
+| `MaximumEvtxBytesPerLog` | positive integer | Maximum retained size of each native EVTX export |
+| `NativeCommandTimeoutSeconds` | positive integer | Wall-clock limit for each native command |
+| `MaximumNativeOutputBytes` | positive integer | Combined standard-output and standard-error limit for each native command |
+| `MaximumTimelineEntries` | positive integer | Maximum entries retained in the derived timeline index |
+| `DataHandlingProfile` | `Full` or `Minimized` | Records the intended data scope and applies minimized defaults to sensitive options unless explicitly overridden |
 | `ExportEvtx` | Boolean | Export native `.evtx` files with `wevtutil` |
 | `ExportScheduledTaskXml` | Boolean | Export task definitions as XML |
 | `IncludeProcessCommandLines` | Boolean | Include process command lines in process evidence |
@@ -42,6 +48,16 @@ ExcludeCollector removes names
 | `MaximumArchiveCompressionRatio` | positive integer | Maximum expanded-to-compressed ratio accepted for one entry |
 
 Unknown settings are rejected. Numeric options are validated against both a positive lower bound and project-defined hard maximums. This prevents misspelled settings and intentionally extreme values from silently changing collection expectations.
+
+## Built-in resource budgets
+
+| Profile | Capsule | EVTX per channel | Native command | Native output | Timeline |
+|---|---:|---:|---:|---:|---:|
+| Minimal | 1 GiB | 64 MiB | 30 seconds | 10 MiB | 2,000 entries |
+| Standard | 5 GiB | 256 MiB | 60 seconds | 25 MiB | 10,000 entries |
+| Extended | 20 GiB | 1 GiB | 120 seconds | 100 MiB | 50,000 entries |
+
+The limits bound acquisition work; they are not storage reservations. When a limit is reached, the capsule keeps useful output, records a structured `LIMIT_REACHED` issue, and marks affected work partial or skipped. Use `Test-IncidentCapsuleReadiness` before collection to inspect the effective values and destination headroom.
 
 ## Curated Standard channels
 
@@ -81,6 +97,12 @@ Invoke-IncidentCapsule `
 @{
     EventLookbackHours         = 36
     MaximumEventsPerLog        = 1500
+    MaximumCapsuleBytes        = 3221225472
+    MaximumEvtxBytesPerLog     = 134217728
+    NativeCommandTimeoutSeconds = 45
+    MaximumNativeOutputBytes   = 20971520
+    MaximumTimelineEntries     = 7500
+    DataHandlingProfile        = 'Minimized'
     ExportEvtx                 = $true
     IncludeProcessCommandLines = $false
     HashProcessExecutables     = $true
@@ -98,4 +120,4 @@ Save the object as `case-config.psd1` and pass it through `-ConfigurationPath`.
 
 ## Privacy-oriented collection
 
-`examples/config.privacy-conscious.psd1` deliberately suppresses several high-value but sensitive sources. It is suitable when the operational question is narrow or data-minimization requirements take precedence. It is not equivalent to the Standard profile and can materially reduce investigative context.
+`examples/config.privacy-conscious.psd1` sets `DataHandlingProfile = 'Minimized'` and deliberately suppresses several high-value but sensitive sources. It is suitable when the operational question is narrow or data-minimization requirements take precedence. It is not equivalent to the Standard profile and can materially reduce investigative context. Explicit values still win, so review the readiness result's `PrivacyScope` before acquisition.

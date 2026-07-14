@@ -190,7 +190,7 @@ All paths below are relative to the capsule root. JSON files use the common coll
 - `evidence/drivers/signed-pnp-drivers.json` and `.csv` when enabled
 - `evidence/drivers/driverquery.csv`
 
-**Notes:** Signed-driver inventory can be large and is bounded by `MaximumSignedDrivers`.
+**Notes:** Signed-driver inventory can be large and is streamed up to `MaximumSignedDrivers`; reaching the limit is recorded as partial coverage.
 
 ## EventLogs
 
@@ -205,4 +205,13 @@ All paths below are relative to the capsule root. JSON files use the common coll
 
 **Decoded fields:** time, event ID, level, provider, machine, user SID, record ID, task, opcode, keywords, and message.
 
-**Notes:** decoded messages can be locale-dependent and can contain sensitive data. EVTX export uses the profile's lookback query and does not clear or mutate the source channel.
+**Notes:** decoded messages can be locale-dependent and can contain sensitive data. EVTX export uses the profile's lookback query and does not clear or mutate the source channel. An export larger than `MaximumEvtxBytesPerLog` is removed and reported as a structured limit issue rather than retained outside the declared budget.
+
+## Cross-collector indexes
+
+Every completed capsule also contains:
+
+- `metadata/coverage.json`, which records selected, successful, partial, failed, skipped, and unavailable coverage with structured issue codes;
+- `analysis/timeline.json` and `analysis/timeline.csv`, which provide a bounded chronological index derived from timestamped structured evidence.
+
+The timeline is a navigation aid, not a new evidence source. Each row retains the collector, source file, source property, and source index needed to return to the original JSON envelope.

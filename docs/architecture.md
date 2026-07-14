@@ -9,6 +9,7 @@ sequenceDiagram
     participant Operator
     participant Invoke as Invoke-IncidentCapsule
     participant Config as Configuration resolver
+    participant Ready as Readiness checks
     participant Engine as Collector engine
     participant Collector
     participant Disk as Capsule root
@@ -17,6 +18,8 @@ sequenceDiagram
     Operator->>Invoke: Output path, case ID, profile
     Invoke->>Config: Resolve defaults + PSD1 overrides
     Config-->>Invoke: Validated effective configuration
+    Invoke->>Ready: Validate host + destination
+    Ready-->>Invoke: Ready / warnings / blockers
     Invoke->>Disk: Create unique evidence structure
     loop Selected collectors
         Invoke->>Engine: Run collector in isolation
@@ -25,13 +28,14 @@ sequenceDiagram
         Collector-->>Engine: Files, warnings, metrics
         Engine-->>Invoke: Collector result
     end
-    Invoke->>Disk: capsule.json + offline report + final log entry
+    Invoke->>Disk: coverage + timeline + report
+    Invoke->>Disk: capsule.json last + final log entry
     Invoke->>Integrity: Freeze and hash files
     Integrity->>Disk: manifest.json + manifest.sha256
-    Integrity->>Disk: verify directory
+    Integrity->>Integrity: Verify frozen directory
     Integrity->>Disk: ZIP + sidecar checksum
-    Integrity->>Disk: safe extract + verify embedded manifest
-    Integrity->>Disk: external verification receipt
+    Integrity->>Integrity: Validate entries, safely extract, verify sidecar + manifest
+    Integrity->>Disk: External verification receipt
     Invoke-->>Operator: Result object
 ```
 
@@ -44,18 +48,23 @@ src/IncidentCapsule/
 ├── Public/
 │   ├── Get-IncidentCapsuleProfile.ps1
 │   ├── Invoke-IncidentCapsule.ps1
+│   ├── Test-IncidentCapsuleReadiness.ps1
 │   └── Test-IncidentCapsuleIntegrity.ps1
 └── Private/
     ├── Collectors.*.ps1
     ├── CollectorEngine.ps1
     ├── Configuration.ps1
     ├── Context.ps1
+    ├── Coverage.ps1
     ├── IO.ps1
     ├── Manifest.ps1
-    └── Report.ps1
+    ├── Readiness.ps1
+    ├── Report.ps1
+    ├── Resources.ps1
+    └── Timeline.ps1
 ```
 
-Private files are dot-sourced in deterministic filename order. Only the three public functions are exported by the module manifest.
+Private files are dot-sourced in deterministic filename order. Only the four public functions are exported by the module manifest.
 
 ## Collector isolation
 
@@ -80,8 +89,8 @@ Structured JSON files use a common outer object:
 
 ```json
 {
-  "$schema": "https://raw.githubusercontent.com/xGreeny/incident-capsule/v1.0.1/docs/schemas/collector-envelope.schema.json",
-  "schemaVersion": "1.0",
+  "$schema": "https://raw.githubusercontent.com/xGreeny/incident-capsule/v1.1.0/docs/schemas/collector-envelope.schema.json",
+  "schemaVersion": "1.1",
   "capsuleId": "IC-...",
   "collector": "Processes",
   "capturedAtUtc": "2026-07-12T18:42:40.1234567Z",
@@ -105,14 +114,15 @@ The precedence order is:
 
 ## Integrity boundary
 
-The acquisition root is mutable until capsule metadata, report, and collector log are finalized. The final log entry is written before hashing. After that point:
+The acquisition root is mutable until collection, coverage, timeline, report, capsule metadata, and the collector log are finalized. Capsule metadata is the last generated content file. The final log entry is written before hashing. After that point:
 
 - no collector or report file is modified;
 - every non-manifest file receives a SHA-256 entry;
+- the frozen directory is verified against the manifest before archiving;
 - the archive is built from the frozen root;
 - the archive hash is written outside the archive;
 - every ZIP entry is path- and budget-validated before extraction;
-- the newly created archive is independently verified before source cleanup;
+- the sidecar and embedded manifest are independently verified before optional source-directory removal;
 - an external verification receipt records the post-creation result.
 
-This protects against accidental modification and enables transfer verification. It does not provide authenticity against an attacker who can replace both evidence and checksums. See [Threat model](threat-model.md).
+Verification rejects reparse points, unsafe archive paths, colliding entries, and archives outside configured entry, uncompressed-size, or compression-ratio limits. This protects against accidental modification and enables safer transfer verification. It does not provide authenticity against an attacker who can replace both evidence and checksums. See [Threat model](threat-model.md).

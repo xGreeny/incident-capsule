@@ -2,6 +2,38 @@
 
 All notable changes to Incident Capsule are documented in this file. The project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+## [1.1.0] - 2026-07-14
+
+### Security
+
+- Harden archive handoff with sidecar enforcement, checksum-list validation, symbolic-link metadata rejection, bounded safe extraction, and external `.zip.verification.json` receipts.
+- Reject reparse points, absolute or traversing paths, alternate-data-stream separators, duplicate entries, and case-colliding paths before evidence access.
+
+### Added
+
+- `Test-IncidentCapsuleReadiness` with stable `Ready`, `ReadyWithWarnings`, and `Blocked` outcomes, effective configuration, privacy scope, resource limits, command/provider checks, event-channel availability, elevation context, destination writability, and storage headroom.
+- Capsule, EVTX, native-command, native-output, and derived-timeline budgets with bounded built-in profile defaults and explicit skip/truncation reporting.
+- Structured `metadata/coverage.json` with collector coverage, machine-readable issue codes, data-handling scope, and applied resource limits.
+- Bounded, derived `analysis/timeline.json` and `analysis/timeline.csv` indexes with source-file and zero-based source-record provenance.
+- Schema version 1.1 definitions for capsule metadata, collector envelopes, manifests, coverage, timelines, and verification receipts, while retaining compatible 1.0 inputs.
+
+### Changed
+
+- Finalization now records collection and finalization separately, writes metadata last, freezes the working directory before hashing, and fails closed when directory or archive verification does not pass.
+- Native commands now have enforced time and output limits; CSV exports neutralize spreadsheet formulas; JSON, text, and CSV writes are atomic.
+- Integrity verification now validates manifest structure, conventional checksum lists, paths, ZIP entry types, entry sizes, expanded size, and compression ratio before bounded extraction.
+- `-RemoveWorkingDirectory` now removes the source directory only after the archive sidecar and embedded manifest both verify successfully.
+- Offline reports now summarize coverage, limitations, privacy scope, resource limits, and the derived timeline without presenting a security verdict.
+- Release packages are self-contained and smoke-tested through both Windows PowerShell 5.1 and PowerShell 7; tagged assets receive provenance attestations before an isolated least-privilege publish job.
+
+### Fixed
+
+- Empty derived timelines now finalize correctly under Windows PowerShell 5.1.
+- Direct `powershell.exe -File build.ps1` execution and combined `-Task All` validation now work with the pinned toolchain.
+- The packaged launcher now resolves its module from the extracted release instead of relying on a source checkout.
+
 ## [1.0.1] - 2026-07-14
 
 ### Security
@@ -47,5 +79,6 @@ All notable changes to Incident Capsule are documented in this file. The project
 - Pester tests, PSScriptAnalyzer integration, continuous integration, and tagged-release packaging.
 - Security, evidence-handling, architecture, configuration, and collector-reference documentation.
 
+[1.1.0]: https://github.com/xGreeny/incident-capsule/releases/tag/v1.1.0
 [1.0.1]: https://github.com/xGreeny/incident-capsule/releases/tag/v1.0.1
 [1.0.0]: https://github.com/xGreeny/incident-capsule/releases/tag/v1.0.0

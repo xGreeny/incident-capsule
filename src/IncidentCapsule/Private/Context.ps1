@@ -115,6 +115,8 @@ function New-ICContext {
         StartedAtUtc     = $start
         CompletedAtUtc   = $null
         Status           = 'Running'
+        CollectionStatus = 'Running'
+        FinalizationStatus = 'NotStarted'
         OutputPath       = $resolvedOutput
         RootPath         = $root
         EvidencePath     = $directories.Evidence

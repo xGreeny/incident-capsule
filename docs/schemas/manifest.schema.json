@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/xGreeny/incident-capsule/v1.0.1/docs/schemas/manifest.schema.json",
+  "$id": "https://raw.githubusercontent.com/xGreeny/incident-capsule/v1.1.0/docs/schemas/manifest.schema.json",
   "title": "Incident Capsule file manifest",
   "type": "object",
   "required": [
@@ -15,7 +15,8 @@
       "type": "string"
     },
     "schemaVersion": {
-      "const": "1.0"
+      "type": "string",
+      "enum": ["1.0", "1.1"]
     },
     "capsuleId": {
       "type": "string"
@@ -29,6 +30,7 @@
     },
     "files": {
       "type": "array",
+      "uniqueItems": true,
       "items": {
         "type": "object",
         "required": [
@@ -39,7 +41,9 @@
         ],
         "properties": {
           "path": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^(?!/)(?![A-Za-z]:)(?!.*\\\\)(?!.*(?:^|/)\\.\\.(?:/|$)).+$"
           },
           "length": {
             "type": "integer",

@@ -23,6 +23,9 @@ A Standard collection creates an evidence directory and a ZIP archive:
 
 ```text
 IC_IR-2026-0042_WS-042_20260712T184233Z/
+├── analysis/
+│   ├── timeline.csv
+│   └── timeline.json
 ├── evidence/
 │   ├── defender/
 │   ├── drivers/
@@ -45,6 +48,7 @@ IC_IR-2026-0042_WS-042_20260712T184233Z/
 │   └── collector.log
 ├── metadata/
 │   ├── capsule.json
+│   ├── coverage.json
 │   ├── manifest.json
 │   └── manifest.sha256
 └── report/
@@ -55,17 +59,38 @@ IC_IR-2026-0042_WS-042_20260712T184233Z.zip.sha256
 IC_IR-2026-0042_WS-042_20260712T184233Z.zip.verification.json
 ```
 
-The report is self-contained and opens offline. JSON files use a common evidence envelope and remain the canonical structured evidence. Large tabular datasets can also receive spreadsheet-safe CSV views. Every file in the capsule is listed in a SHA-256 manifest. The ZIP receives a separate sidecar checksum and an external machine-readable verification receipt after safe extraction and embedded-manifest verification.
+The report is self-contained and opens offline. JSON files use a common evidence envelope and remain the canonical structured evidence; large tabular datasets can also receive spreadsheet-safe CSV views. `coverage.json` makes missing, partial, skipped, and successful acquisition explicit. The bounded timeline is a derived navigation index with links back to source evidence, not a separate source or a security verdict. Every file in the capsule is listed in a SHA-256 manifest. The ZIP receives a separate sidecar checksum and an external machine-readable verification receipt after safe extraction and embedded-manifest verification.
 
 ## Quick start
 
 Open an elevated PowerShell session when the response procedure permits it. Non-elevated execution is supported, but protected event channels and parts of the security configuration can be unavailable.
+
+For a downloaded release, keep the ZIP and its `.sha256` sidecar together, verify the hash, and run the launcher from the extracted package:
+
+```powershell
+$archive = '.\incident-capsule-1.1.0.zip'
+$expectedHash = ((Get-Content "$archive.sha256" -Raw).Trim() -split '\s+')[0]
+$actualHash = (Get-FileHash $archive -Algorithm SHA256).Hash
+if ($actualHash -ne $expectedHash) { throw 'Release checksum mismatch.' }
+
+Expand-Archive $archive -DestinationPath .\incident-capsule-release
+Set-Location .\incident-capsule-release\incident-capsule-1.1.0
+.\Invoke-IncidentCapsule.ps1 -OutputPath 'C:\IR\Cases' -CaseId 'IR-2026-0042'
+```
+
+The release is self-contained: its launcher loads `IncidentCapsule/IncidentCapsule.psd1` from the extracted package. A source checkout remains supported as well:
 
 ```powershell
 git clone https://github.com/xGreeny/incident-capsule.git
 Set-Location .\incident-capsule
 
 Import-Module .\src\IncidentCapsule\IncidentCapsule.psd1 -Force
+
+$readiness = Test-IncidentCapsuleReadiness `
+    -OutputPath 'C:\IR\Cases' `
+    -Profile Standard
+$readiness | Format-List Status,IsElevated,OutputPath,PrivacyScope,ResourceLimits
+$readiness.Checks | Where-Object Status -ne 'Passed'
 
 $result = Invoke-IncidentCapsule `
     -OutputPath 'C:\IR\Cases' `
@@ -80,7 +105,7 @@ Verify the directory or archive before analysis or transfer:
 
 ```powershell
 Test-IncidentCapsuleIntegrity -Path $result.WorkingDirectory
-Test-IncidentCapsuleIntegrity -Path $result.ArchivePath
+Test-IncidentCapsuleIntegrity -Path $result.ArchivePath -RequireSidecar
 ```
 
 A single-file workflow can remove the working directory after a verified archive has been created:
@@ -95,11 +120,11 @@ Invoke-IncidentCapsule `
 
 ## Collection profiles
 
-| Profile | Intended use | Event lookback | EVTX export | Executable hashing |
-|---|---|---:|---:|---:|
-| `Minimal` | Fast triage under time pressure | 12 hours | No | No |
-| `Standard` | Default first-response package | 24 hours | Yes | No |
-| `Extended` | Deeper host review when time and storage permit | 72 hours | Yes | Yes, bounded |
+| Profile | Intended use | Data scope | Capsule budget | EVTX/channel | Timeline |
+|---|---|---|---:|---:|---:|
+| `Minimal` | Fast, minimized triage | Minimized | 1 GiB | No export / 64 MiB cap | 2,000 |
+| `Standard` | Default first-response package | Full | 5 GiB | 256 MiB | 10,000 |
+| `Extended` | Deeper host review | Full | 20 GiB | 1 GiB | 50,000 |
 
 Inspect the effective profile before collecting:
 
@@ -167,20 +192,19 @@ See [Configuration](docs/configuration.md) and the ready-to-use files in [`examp
 
 Incident Capsule separates acquisition from verification:
 
-1. collectors write evidence beneath a unique capsule root;
-2. capsule metadata and the offline report are finalized;
-3. logging is closed;
+1. collectors write bounded evidence beneath a unique capsule root;
+2. timeline, structured coverage, and the offline report are generated;
+3. `capsule.json` is written last and logging is closed;
 4. every file except the manifest files themselves is hashed with SHA-256;
-5. `manifest.json` and `manifest.sha256` are written;
-6. the directory is archived;
-7. the archive receives a sidecar SHA-256 checksum;
-8. the archive is safely extracted and independently verified;
-9. a `.zip.verification.json` receipt is written beside the archive.
+5. `manifest.json` and `manifest.sha256` are written and the frozen directory is verified;
+6. the directory is archived and receives a sidecar SHA-256 checksum;
+7. the archive is safely extracted and independently verified, including its sidecar and embedded manifest, before optional source-directory removal;
+8. a `.zip.verification.json` receipt is written beside the archive.
 
-`Test-IncidentCapsuleIntegrity` checks missing, modified, and unexpected files and validates `manifest.sha256` against the JSON manifest. For archives, it validates the sidecar when present, rejects unsafe or duplicate paths, symbolic-link metadata, excessive entry counts, excessive expanded sizes, and suspicious compression ratios before extraction, then verifies the embedded manifest.
+`Test-IncidentCapsuleIntegrity` checks missing, modified, and unexpected files and validates `manifest.sha256` against the JSON manifest. Archive verification rejects unsafe paths, reparse or symbolic-link metadata, duplicate or case-colliding entries, and excessive entry count, expanded size, or compression ratio before extraction, then verifies the embedded manifest. Use `-RequireSidecar` at handoff boundaries so a missing adjacent checksum fails verification.
 
 ```powershell
-$verification = Test-IncidentCapsuleIntegrity -Path 'E:\Evidence\IC_IR-2026-0042_WS-042_20260712T184233Z.zip'
+$verification = Test-IncidentCapsuleIntegrity -Path 'E:\Evidence\IC_IR-2026-0042_WS-042_20260712T184233Z.zip' -RequireSidecar
 $verification | Format-List
 $verification.FileResults | Where-Object Status -ne 'Valid'
 ```
@@ -195,7 +219,8 @@ Incident Capsule is intentionally constrained:
 - no memory acquisition or full-disk imaging;
 - no browser-history or PowerShell-history content collection;
 - no active port scanning;
-- bounded event queries, executable hashing, configuration values, and archive verification;
+- bounded capsule size, EVTX files, native-command runtime/output, event queries, executable hashing, configuration values, high-volume inventories, derived timeline, and archive verification;
+- atomic JSON, CSV, and text writes plus spreadsheet-formula neutralization in CSV exports;
 - collector failures are recorded and do not erase successful evidence;
 - all reports work offline and load no external scripts, fonts, or telemetry.
 
@@ -216,20 +241,15 @@ A capsule can contain usernames, group membership, process command lines, IP add
 
 ```mermaid
 flowchart LR
-    A[Invoke-IncidentCapsule] --> B[Resolve profile and configuration]
-    B --> C[Create unique capsule root]
-    C --> D[Run isolated collectors]
-    D --> E[Structured evidence + native artifacts]
-    D --> F[Warnings and metrics]
-    E --> G[Finalize capsule metadata]
-    F --> G
-    G --> H[Generate offline HTML report]
-    H --> I[Freeze collector log]
-    I --> J[Build SHA-256 manifest]
-    J --> K[Create ZIP archive]
-    K --> L[Write archive sidecar hash]
-    J --> M[Test-IncidentCapsuleIntegrity]
-    L --> M
+    A[Test readiness] --> B[Resolve profile and limits]
+    B --> C[Run isolated collectors]
+    C --> D[Evidence + structured issues]
+    D --> E[Coverage + bounded timeline + report]
+    E --> F[Metadata last + freeze]
+    F --> G[Manifest + directory verification]
+    G --> H[ZIP + sidecar]
+    H --> I[Archive verification]
+    I --> J[Optional verified cleanup]
 ```
 
 More detail is available in [Architecture](docs/architecture.md) and [Threat model](docs/threat-model.md).
@@ -244,21 +264,22 @@ More detail is available in [Architecture](docs/architecture.md) and [Threat mod
 ## Development and release validation
 
 ```powershell
-Install-Module Pester -RequiredVersion 5.9.0 -Scope CurrentUser
-Install-Module PSScriptAnalyzer -RequiredVersion 1.25.0 -Scope CurrentUser
+Install-Module Pester -RequiredVersion 5.9.0 -Scope CurrentUser -Force -SkipPublisherCheck
+Install-Module PSScriptAnalyzer -RequiredVersion 1.25.0 -Scope CurrentUser -Force
 
 ./build.ps1 -Task Analyze
 ./build.ps1 -Task Test
 ./build.ps1 -Task Package
 ```
 
-The CI workflow runs static analysis and Pester in both Windows PowerShell 5.1 and PowerShell 7. A version bump merged to `main` is validated, packaged, and published as an immutable GitHub release with a ZIP and SHA-256 checksum.
+`Package` creates the ZIP and SHA-256 sidecar, verifies the checksum, extracts the ZIP into a fresh temporary directory, and exercises both the packaged module and launcher in Windows PowerShell 5.1 and PowerShell 7. CI performs this package test on pull requests and `main`, in addition to running Pester in both editions. Tags matching `v*` must match the manifest/runtime/changelog version and produce immutable, provenance-attested release assets.
 
 ## Documentation
 
 - [Architecture](docs/architecture.md)
 - [Collector reference](docs/collector-reference.md)
 - [Configuration](docs/configuration.md)
+- [Readiness and safe handoff](docs/readiness-and-handoff.md)
 - [Evidence handling](docs/evidence-handling.md)
 - [Threat model](docs/threat-model.md)
 - [Troubleshooting](docs/troubleshooting.md)

@@ -33,8 +33,24 @@ param(
 Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
 
-$modulePath = Join-Path (Split-Path $PSScriptRoot -Parent) 'src/IncidentCapsule/IncidentCapsule.psd1'
-Import-Module $modulePath -Force
+$moduleCandidates = @(
+    (Join-Path $PSScriptRoot 'IncidentCapsule/IncidentCapsule.psd1')
+    (Join-Path (Split-Path $PSScriptRoot -Parent) 'src/IncidentCapsule/IncidentCapsule.psd1')
+)
+
+$modulePath = @(
+    $moduleCandidates |
+        Where-Object { Test-Path -LiteralPath $_ -PathType Leaf }
+) | Select-Object -First 1
+
+if ([string]::IsNullOrWhiteSpace($modulePath)) {
+    throw (
+        "IncidentCapsule module manifest was not found. Searched: {0}" -f
+        ($moduleCandidates -join ', ')
+    )
+}
+
+Import-Module $modulePath -Force -ErrorAction Stop
 
 $parameters = @{
     OutputPath             = $OutputPath

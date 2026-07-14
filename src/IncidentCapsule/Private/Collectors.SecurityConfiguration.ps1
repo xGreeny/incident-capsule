@@ -37,12 +37,12 @@ function Get-ICSecurityConfigurationEvidence {
     Add-ICOutputFiles -List $files -Path (Export-ICCollectorData -Context $Context -Collector SecurityConfiguration -RelativePath 'evidence/security/firewall-profiles.json' -Data $firewallProfiles -Csv)
 
     $firewallRules = @()
-    $firewallRuleTotal = 0
+    $firewallRuleTotal = $null
     if (Test-ICCommandAvailable -Name 'Get-NetFirewallRule') {
         try {
-            $allRules = @(Get-NetFirewallRule -PolicyStore ActiveStore -ErrorAction Stop)
-            $firewallRuleTotal = $allRules.Count
-            $firewallRules = @($allRules | Select-Object -First $Context.Configuration.MaximumFirewallRules | ForEach-Object {
+            $maximumFirewallRules = [int]$Context.Configuration.MaximumFirewallRules
+            $boundedRules = @(Get-NetFirewallRule -PolicyStore ActiveStore -ErrorAction Stop | Select-Object -First ($maximumFirewallRules + 1))
+            $firewallRules = @($boundedRules | Select-Object -First $maximumFirewallRules | ForEach-Object {
                 [pscustomobject][ordered]@{
                     Name = $_.Name
                     DisplayName = $_.DisplayName
@@ -65,8 +65,10 @@ function Get-ICSecurityConfigurationEvidence {
                     PolicyStoreSourceType = $_.PolicyStoreSourceType.ToString()
                 }
             })
-            if ($firewallRuleTotal -gt $firewallRules.Count) {
-                Add-ICCollectorWarning -List $warnings -Message "Firewall-rule export was bounded at $($firewallRules.Count) of $firewallRuleTotal rule(s)."
+            $firewallRuleTotal = $firewallRules.Count
+            if ($boundedRules.Count -gt $firewallRules.Count) {
+                $firewallRuleTotal = $null
+                Add-ICCollectorWarning -List $warnings -Message "Firewall-rule export reached the configured limit of $($firewallRules.Count) rules; additional rules exist."
             }
         }
         catch { Add-ICCollectorWarning -List $warnings -Message "Firewall rules: $($_.Exception.Message)" }
@@ -122,7 +124,7 @@ function Get-ICSecurityConfigurationEvidence {
     }
 
     $securityPolicyPath = Join-Path $Context.RootPath 'evidence/security/local-security-policy.inf'
-    $secedit = Invoke-ICNativeCommand -FilePath (Get-ICSystemExecutable -Name 'secedit.exe') -ArgumentList @('/export', '/cfg', $securityPolicyPath, '/quiet')
+    $secedit = Invoke-ICNativeCommand -FilePath (Get-ICSystemExecutable -Name 'secedit.exe') -ArgumentList @('/export', '/cfg', $securityPolicyPath, '/quiet') -Context $Context
     $seceditLogPath = Join-Path $Context.RootPath 'evidence/security/secedit-export.txt'
     [void](Write-ICUtf8File -Path $seceditLogPath -Content ((@(
         "# capturedAtUtc: $([datetime]::UtcNow.ToString('o'))",

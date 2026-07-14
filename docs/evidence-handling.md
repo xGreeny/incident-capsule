@@ -7,6 +7,7 @@ Incident Capsule creates a triage artifact, not a full forensic image. Its value
 - Confirm authority to examine the host and collect user/process/event data.
 - Record the case identifier, operator, host, date/time, and reason for collection in the incident record.
 - Prefer a destination on an encrypted, access-controlled volume with sufficient capacity.
+- Run `Test-IncidentCapsuleReadiness` with the intended profile and configuration; resolve blockers and record material warnings before acquisition.
 - Consider whether running new software on the host is acceptable under the response plan.
 - If volatile evidence must be acquired in a specific order, coordinate Incident Capsule with memory, EDR, or network acquisition rather than improvising.
 
@@ -20,8 +21,8 @@ Incident Capsule creates a triage artifact, not a full forensic image. Its value
 
 ## After collection
 
-1. Verify the working directory or ZIP with `Test-IncidentCapsuleIntegrity`.
-2. Record the archive SHA-256 from the sidecar in the case record.
+1. Verify the working directory with `Test-IncidentCapsuleIntegrity`, or verify a ZIP and require its adjacent checksum with `Test-IncidentCapsuleIntegrity -Path <archive.zip> -RequireSidecar`.
+2. Record the archive SHA-256 from the sidecar and preserve the external `.zip.verification.json` receipt in the case record.
 3. Transfer through an approved secure channel.
 4. Verify the SHA-256 at the destination.
 5. Preserve an original read-only copy.
@@ -59,4 +60,4 @@ Never upload a real capsule to a public issue, chat, paste service, or malware-a
 
 ## Integrity limitations
 
-SHA-256 detects modification when a trusted checksum or trusted manifest is available. It does not prevent an attacker with write access from replacing evidence and recalculating all hashes. Store the sidecar hash in a separate trusted case system or sign it using an organizational signing process when authenticity is required.
+SHA-256 detects modification when a trusted checksum or trusted manifest is available. Archive verification also rejects unsafe paths, reparse points, symbolic-link metadata, duplicate entries, and excessive archive expansion. The verification receipt documents the result and applied policy; it is not a signature. None of these controls prevents an attacker with write access from replacing evidence and recalculating all hashes. Store the sidecar hash in a separate trusted case system or sign it using an organizational signing process when authenticity is required.

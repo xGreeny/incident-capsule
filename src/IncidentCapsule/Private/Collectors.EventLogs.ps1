@@ -109,10 +109,20 @@ function Get-ICEventLogEvidence {
             $evtxDirectory = Split-Path -Parent $evtxPath
             if (-not (Test-Path -LiteralPath $evtxDirectory)) { New-Item -ItemType Directory -Path $evtxDirectory -Force | Out-Null }
             $query = "*[System[TimeCreated[timediff(@SystemTime) <= $milliseconds]]]"
-            $export = Invoke-ICNativeCommand -FilePath $wevtutilPath -ArgumentList @('epl', $logName, $evtxPath, '/ow:true', "/q:$query")
+            $export = Invoke-ICNativeCommand -FilePath $wevtutilPath -ArgumentList @('epl', $logName, $evtxPath, '/ow:true', "/q:$query") -Context $Context
             if ($null -eq $export.Error -and $export.ExitCode -eq 0 -and (Test-Path -LiteralPath $evtxPath -PathType Leaf)) {
-                [void]$files.Add($evtxPath)
-                $evtxCount++
+                $maximumEvtxBytes = [int64](Get-ICPropertyValue -InputObject $Context.Configuration -Name 'MaximumEvtxBytesPerLog' -Default 268435456L)
+                $evtxLength = [int64](Get-Item -LiteralPath $evtxPath -Force).Length
+                if ($evtxLength -gt $maximumEvtxBytes) {
+                    Remove-Item -LiteralPath $evtxPath -Force -ErrorAction SilentlyContinue
+                    $evtxRelative = $null
+                    $exportError = "EVTX export exceeded the $maximumEvtxBytes-byte per-channel limit and was removed."
+                    Add-ICCollectorWarning -List $warnings -Message "EVTX export '$logName' reached a configured limit: $exportError"
+                }
+                else {
+                    [void]$files.Add($evtxPath)
+                    $evtxCount++
+                }
             }
             else {
                 $exportError = if ($null -ne $export.Error) { $export.Error } else { @($export.Output) -join ' | ' }

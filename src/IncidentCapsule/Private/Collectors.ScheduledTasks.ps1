@@ -116,7 +116,7 @@ function Get-ICScheduledTaskEvidence {
 
     Add-ICOutputFiles -List $files -Path (Export-ICCollectorData -Context $Context -Collector ScheduledTasks -RelativePath 'evidence/scheduled-tasks/tasks.json' -Data @($taskRecords))
     $csvPath = Join-Path $Context.RootPath 'evidence/scheduled-tasks/tasks.csv'
-    [void](Write-ICCsvFile -Path $csvPath -InputObject @($taskCsv))
+    [void](Write-ICCsvFile -Path $csvPath -InputObject @($taskCsv) -SpreadsheetSafe ([bool](Get-ICPropertyValue -InputObject $Context.Configuration -Name 'SpreadsheetSafeCsv' -Default $true)))
     [void]$files.Add($csvPath)
 
     return New-ICCollectorResultData -OutputFiles @($files) -Warnings @($warnings) -Metrics ([ordered]@{

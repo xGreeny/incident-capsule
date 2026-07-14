@@ -48,7 +48,7 @@ function New-ICCommonConfiguration {
         SpreadsheetSafeCsv              = $true
         MaximumArchiveEntries           = 20000
         MaximumArchiveEntryBytes        = 1073741824L
-        MaximumArchiveExpandedBytes     = 10737418240L
+        MaximumArchiveExpandedBytes     = 21474836480L
         MaximumArchiveCompressionRatio  = 250
     }
 }
@@ -71,14 +71,20 @@ function Get-ICDefaultConfiguration {
                 EventLogs                    = @(Get-ICDefaultEventLogs -Profile Minimal)
                 EventLookbackHours           = 12
                 MaximumEventsPerLog          = 250
+                MaximumCapsuleBytes          = 1073741824L
+                MaximumEvtxBytesPerLog       = 67108864L
+                NativeCommandTimeoutSeconds  = 30
+                MaximumNativeOutputBytes     = 10485760L
+                MaximumTimelineEntries       = 2000
+                DataHandlingProfile          = 'Minimized'
                 ExportEvtx                   = $false
                 ExportScheduledTaskXml       = $false
-                IncludeProcessCommandLines   = $true
+                IncludeProcessCommandLines   = $false
                 HashProcessExecutables       = $false
                 MaximumExecutableHashes      = 50
                 HashPersistenceFiles         = $false
                 CollectWmiSubscriptions      = $false
-                CollectDefenderPreferences   = $true
+                CollectDefenderPreferences   = $false
                 CollectWindowsUpdateHistory  = $false
                 MaximumWindowsUpdateHistory  = 100
                 CollectSignedDrivers         = $false
@@ -92,6 +98,12 @@ function Get-ICDefaultConfiguration {
                 EventLogs                    = @(Get-ICDefaultEventLogs -Profile Standard)
                 EventLookbackHours           = 24
                 MaximumEventsPerLog          = 1000
+                MaximumCapsuleBytes          = 5368709120L
+                MaximumEvtxBytesPerLog       = 268435456L
+                NativeCommandTimeoutSeconds  = 60
+                MaximumNativeOutputBytes     = 26214400L
+                MaximumTimelineEntries       = 10000
+                DataHandlingProfile          = 'Full'
                 ExportEvtx                   = $true
                 ExportScheduledTaskXml       = $true
                 IncludeProcessCommandLines   = $true
@@ -113,6 +125,12 @@ function Get-ICDefaultConfiguration {
                 EventLogs                    = @(Get-ICDefaultEventLogs -Profile Extended)
                 EventLookbackHours           = 72
                 MaximumEventsPerLog          = 5000
+                MaximumCapsuleBytes          = 21474836480L
+                MaximumEvtxBytesPerLog       = 1073741824L
+                NativeCommandTimeoutSeconds  = 120
+                MaximumNativeOutputBytes     = 104857600L
+                MaximumTimelineEntries       = 50000
+                DataHandlingProfile          = 'Full'
                 ExportEvtx                   = $true
                 ExportScheduledTaskXml       = $true
                 IncludeProcessCommandLines   = $true
@@ -220,17 +238,33 @@ function Test-ICConfiguration {
         throw 'EventLogs cannot contain empty names.'
     }
 
-    foreach ($key in $script:ICConfigurationMaximums.Keys) {
+    foreach ($key in $script:ICConfigurationLimits.Keys) {
         $value = $Configuration[$key]
         if ($value -isnot [int] -and $value -isnot [long]) {
             throw "Configuration key '$key' must be an integer."
         }
-        if ([int64]$value -lt 1) {
-            throw "Configuration key '$key' must be greater than zero."
+        $minimum = [int64]$script:ICConfigurationLimits[$key].Minimum
+        $maximum = [int64]$script:ICConfigurationLimits[$key].Maximum
+        if ([int64]$value -lt $minimum) {
+            throw "Configuration key '$key' must be between $minimum and $maximum."
         }
-        if ([int64]$value -gt [int64]$script:ICConfigurationMaximums[$key]) {
-            throw "Configuration key '$key' exceeds the supported maximum of $($script:ICConfigurationMaximums[$key])."
+        if ([int64]$value -gt $maximum) {
+            throw "Configuration key '$key' exceeds the supported maximum of $maximum and must be between $minimum and $maximum."
         }
+    }
+
+    if ($Configuration.DataHandlingProfile -isnot [string] -or $Configuration.DataHandlingProfile -notin @('Full', 'Minimized')) {
+        throw "Configuration key 'DataHandlingProfile' must be 'Full' or 'Minimized'."
+    }
+
+    if ([int64]$Configuration.MaximumArchiveExpandedBytes -lt [int64]$Configuration.MaximumCapsuleBytes) {
+        throw "Configuration key 'MaximumArchiveExpandedBytes' must be greater than or equal to MaximumCapsuleBytes."
+    }
+    if ([int64]$Configuration.MaximumArchiveEntryBytes -gt [int64]$Configuration.MaximumArchiveExpandedBytes) {
+        throw "Configuration key 'MaximumArchiveEntryBytes' cannot exceed MaximumArchiveExpandedBytes."
+    }
+    if ([int64]$Configuration.MaximumArchiveEntryBytes -lt [int64]$Configuration.MaximumEvtxBytesPerLog) {
+        throw "Configuration key 'MaximumArchiveEntryBytes' must be greater than or equal to MaximumEvtxBytesPerLog."
     }
 
     foreach ($key in @(
@@ -262,6 +296,7 @@ function Resolve-ICConfiguration {
     )
 
     $configuration = Get-ICDefaultConfiguration -Profile $Profile
+    $explicitConfigurationKeys = @()
 
     if (-not [string]::IsNullOrWhiteSpace($ConfigurationPath)) {
         if (-not (Test-Path -LiteralPath $ConfigurationPath -PathType Leaf)) {
@@ -269,7 +304,19 @@ function Resolve-ICConfiguration {
         }
 
         $override = Import-PowerShellDataFile -LiteralPath $ConfigurationPath
+        $explicitConfigurationKeys = @($override.Keys)
         $configuration = Merge-ICHashtable -Base $configuration -Override $override
+    }
+
+    if ($configuration.DataHandlingProfile -eq 'Minimized') {
+        foreach ($sensitiveKey in @(
+            'IncludeProcessCommandLines', 'ExportScheduledTaskXml',
+            'CollectDefenderPreferences', 'CollectWindowsUpdateHistory'
+        )) {
+            if ($sensitiveKey -notin $explicitConfigurationKeys) {
+                $configuration[$sensitiveKey] = $false
+            }
+        }
     }
 
     if ($null -ne $Collectors -and $Collectors.Count -gt 0) {

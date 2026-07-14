@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/xGreeny/incident-capsule/v1.1.0/docs/schemas/timeline.schema.json",
+  "title": "Incident Capsule derived timeline",
+  "type": "object",
+  "required": [
+    "$schema",
+    "schemaVersion",
+    "capsuleId",
+    "generatedAtUtc",
+    "sourceFiles",
+    "sourceFilesRead",
+    "sourceFilesFailed",
+    "candidateCount",
+    "invalidTimestampCount",
+    "entryCount",
+    "maximumEntries",
+    "truncated",
+    "entries"
+  ],
+  "properties": {
+    "$schema": { "type": "string", "format": "uri" },
+    "schemaVersion": { "type": "string", "enum": ["1.1"] },
+    "capsuleId": { "type": "string", "minLength": 1 },
+    "generatedAtUtc": { "type": "string", "format": "date-time" },
+    "sourceFiles": { "type": "integer", "minimum": 0 },
+    "sourceFilesRead": { "type": "integer", "minimum": 0 },
+    "sourceFilesFailed": { "type": "integer", "minimum": 0 },
+    "candidateCount": { "type": "integer", "minimum": 0 },
+    "invalidTimestampCount": { "type": "integer", "minimum": 0 },
+    "entryCount": { "type": "integer", "minimum": 0 },
+    "maximumEntries": { "type": "integer", "minimum": 1 },
+    "truncated": { "type": "boolean" },
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "timestampUtc",
+          "collector",
+          "eventType",
+          "title",
+          "source",
+          "sourceIndex",
+          "recordId",
+          "eventId",
+          "provider"
+        ],
+        "properties": {
+          "timestampUtc": { "type": "string", "format": "date-time" },
+          "collector": { "type": "string", "minLength": 1 },
+          "eventType": { "type": "string", "minLength": 1 },
+          "title": { "type": "string" },
+          "source": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^(?!/)(?![A-Za-z]:)(?!.*\\\\)(?!\\.\\.?(?:/|$))(?!.*\\/\\.\\.?(?:/|$)).+$"
+          },
+          "sourceIndex": { "type": "integer", "minimum": 0 },
+          "recordId": { "type": ["string", "integer", "null"] },
+          "eventId": { "type": ["string", "integer", "null"] },
+          "provider": { "type": ["string", "null"] }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

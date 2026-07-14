@@ -1,0 +1,142 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/xGreeny/incident-capsule/v1.1.0/docs/schemas/coverage.schema.json",
+  "title": "Incident Capsule collection coverage",
+  "type": "object",
+  "required": [
+    "$schema",
+    "schemaVersion",
+    "capsuleId",
+    "generatedAtUtc",
+    "summary",
+    "privacyScope",
+    "resourceLimits",
+    "collectors",
+    "issues"
+  ],
+  "properties": {
+    "$schema": { "type": "string", "format": "uri" },
+    "schemaVersion": { "type": "string", "enum": ["1.1"] },
+    "capsuleId": { "type": "string", "minLength": 1 },
+    "generatedAtUtc": { "type": "string", "format": "date-time" },
+    "summary": {
+      "type": "object",
+      "required": [
+        "totalCollectors",
+        "selectedCollectors",
+        "notSelected",
+        "notRun",
+        "succeeded",
+        "partial",
+        "failed",
+        "skipped",
+        "issueCount",
+        "errorCount",
+        "warningCount",
+        "limitsReached"
+      ],
+      "properties": {
+        "totalCollectors": { "type": "integer", "minimum": 0 },
+        "selectedCollectors": { "type": "integer", "minimum": 0 },
+        "notSelected": { "type": "integer", "minimum": 0 },
+        "notRun": { "type": "integer", "minimum": 0 },
+        "succeeded": { "type": "integer", "minimum": 0 },
+        "partial": { "type": "integer", "minimum": 0 },
+        "failed": { "type": "integer", "minimum": 0 },
+        "skipped": { "type": "integer", "minimum": 0 },
+        "issueCount": { "type": "integer", "minimum": 0 },
+        "errorCount": { "type": "integer", "minimum": 0 },
+        "warningCount": { "type": "integer", "minimum": 0 },
+        "limitsReached": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "privacyScope": {
+      "type": "object",
+      "required": [
+        "dataHandlingProfile",
+        "processCommandLines",
+        "nativeEventLogs",
+        "scheduledTaskXml",
+        "defenderPreferences",
+        "windowsUpdateHistory",
+        "signedDriverInventory",
+        "runningExecutableHashes",
+        "persistenceFileHashes",
+        "spreadsheetSafeCsv",
+        "containsPotentiallySensitiveData"
+      ],
+      "properties": {
+        "dataHandlingProfile": { "type": "string", "enum": ["Full", "Minimized"] },
+        "processCommandLines": { "type": "boolean" },
+        "nativeEventLogs": { "type": "boolean" },
+        "scheduledTaskXml": { "type": "boolean" },
+        "defenderPreferences": { "type": "boolean" },
+        "windowsUpdateHistory": { "type": "boolean" },
+        "signedDriverInventory": { "type": "boolean" },
+        "runningExecutableHashes": { "type": "boolean" },
+        "persistenceFileHashes": { "type": "boolean" },
+        "spreadsheetSafeCsv": { "type": "boolean" },
+        "containsPotentiallySensitiveData": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "resourceLimits": {
+      "type": "object",
+      "properties": {
+        "EventLookbackHours": { "type": "integer", "minimum": 1 },
+        "MaximumEventsPerLog": { "type": "integer", "minimum": 1 },
+        "MaximumEvtxBytesPerLog": { "type": "integer", "minimum": 1 },
+        "MaximumExecutableHashes": { "type": "integer", "minimum": 1 },
+        "MaximumWindowsUpdateHistory": { "type": "integer", "minimum": 1 },
+        "MaximumSignedDrivers": { "type": "integer", "minimum": 1 },
+        "MaximumFirewallRules": { "type": "integer", "minimum": 1 },
+        "MaximumCapsuleBytes": { "type": "integer", "minimum": 1 },
+        "NativeCommandTimeoutSeconds": { "type": "integer", "minimum": 1 },
+        "MaximumNativeOutputBytes": { "type": "integer", "minimum": 1 },
+        "MaximumTimelineEntries": { "type": "integer", "minimum": 1 },
+        "MaximumArchiveEntries": { "type": "integer", "minimum": 1 },
+        "MaximumArchiveEntryBytes": { "type": "integer", "minimum": 1 },
+        "MaximumArchiveExpandedBytes": { "type": "integer", "minimum": 1 },
+        "MaximumArchiveCompressionRatio": { "type": "integer", "minimum": 1 }
+      },
+      "additionalProperties": false
+    },
+    "collectors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "selected", "status", "outputFiles", "issueCount", "issues"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "selected": { "type": "boolean" },
+          "status": {
+            "type": "string",
+            "enum": ["NotSelected", "NotRun", "Succeeded", "Partial", "Failed", "Skipped"]
+          },
+          "outputFiles": { "type": "integer", "minimum": 0 },
+          "issueCount": { "type": "integer", "minimum": 0 },
+          "issues": { "type": "array", "items": { "$ref": "#/$defs/issue" } }
+        },
+        "additionalProperties": false
+      }
+    },
+    "issues": { "type": "array", "items": { "$ref": "#/$defs/issue" } }
+  },
+  "$defs": {
+    "issue": {
+      "type": "object",
+      "required": ["code", "severity", "component", "message", "source", "details"],
+      "properties": {
+        "code": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]+$" },
+        "severity": { "type": "string", "enum": ["Info", "Warning", "Error"] },
+        "component": { "type": "string", "minLength": 1 },
+        "message": { "type": "string", "minLength": 1 },
+        "source": { "type": ["string", "null"] },
+        "details": { "type": "object" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

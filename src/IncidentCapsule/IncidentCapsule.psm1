@@ -14,5 +14,6 @@ Get-ChildItem -LiteralPath $publicPath -Filter '*.ps1' -File |
 Export-ModuleMember -Function @(
     'Get-IncidentCapsuleProfile',
     'Invoke-IncidentCapsule',
+    'Test-IncidentCapsuleReadiness',
     'Test-IncidentCapsuleIntegrity'
 )

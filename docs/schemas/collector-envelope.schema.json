@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/xGreeny/incident-capsule/v1.0.1/docs/schemas/collector-envelope.schema.json",
+  "$id": "https://raw.githubusercontent.com/xGreeny/incident-capsule/v1.1.0/docs/schemas/collector-envelope.schema.json",
   "title": "Incident Capsule collector envelope",
   "type": "object",
   "required": [
@@ -16,7 +16,8 @@
       "type": "string"
     },
     "schemaVersion": {
-      "const": "1.0"
+      "type": "string",
+      "enum": ["1.0", "1.1"]
     },
     "capsuleId": {
       "type": "string",
@@ -34,7 +35,24 @@
       "type": "string",
       "minLength": 1
     },
-    "data": {}
+    "data": {},
+    "source": {
+      "type": ["string", "null"]
+    },
+    "availability": {
+      "type": "string",
+      "enum": ["Available", "Partial", "Unavailable", "NotApplicable"]
+    },
+    "truncated": {
+      "type": "boolean"
+    },
+    "limitReason": {
+      "type": ["string", "null"]
+    },
+    "recordCount": {
+      "type": "integer",
+      "minimum": 0
+    }
   },
   "additionalProperties": false
 }

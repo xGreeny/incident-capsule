@@ -2,12 +2,11 @@ name: Release
 
 on:
   push:
-    branches:
-      - main
-  workflow_dispatch:
+    tags:
+      - 'v*'
 
 permissions:
-  contents: write
+  contents: read
 
 env:
   PESTER_VERSION: '5.9.0'
@@ -18,10 +17,15 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  release:
-    name: Validate, package and publish version
+  validate-package:
+    name: Validate, package and attest
     runs-on: windows-latest
     timeout-minutes: 35
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+      artifact-metadata: write
 
     steps:
       - name: Check out repository
@@ -29,36 +33,14 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Resolve release version
-        id: version
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $manifest = Test-ModuleManifest `
-            -Path ./src/IncidentCapsule/IncidentCapsule.psd1 `
-            -ErrorAction Stop
-
-          $tag = "v$($manifest.Version)"
-          "tag=$tag" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-
-          gh release view $tag *> $null
-          if ($LASTEXITCODE -eq 0) {
-              "publish=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-              Write-Host "Release $tag already exists; no mutable replacement will be published."
-          }
-          else {
-              "publish=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-              Write-Host "Release $tag will be validated and published from $env:GITHUB_SHA."
-          }
-
-      - name: Install build dependencies
-        if: steps.version.outputs.publish == 'true'
+      - name: Install pinned build dependencies
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+
+          Set-PSRepository `
+            -Name PSGallery `
+            -InstallationPolicy Trusted
 
           Install-Module `
             -Name Pester `
@@ -75,57 +57,171 @@ jobs:
             -Force `
             -AllowClobber
 
-      - name: Validate and package
-        if: steps.version.outputs.publish == 'true'
-        shell: pwsh
-        run: ./build.ps1 -Task All
+          Import-Module `
+            -Name Pester `
+            -RequiredVersion $env:PESTER_VERSION `
+            -Force `
+            -ErrorAction Stop
 
-      - name: Validate release assets
-        if: steps.version.outputs.publish == 'true'
+          Import-Module `
+            -Name PSScriptAnalyzer `
+            -RequiredVersion $env:PSSCRIPTANALYZER_VERSION `
+            -Force `
+            -ErrorAction Stop
+
+          Write-Host "Pester version: $((Get-Module Pester).Version)"
+          Write-Host "PSScriptAnalyzer version: $((Get-Module PSScriptAnalyzer).Version)"
+
+      - name: Validate and package tagged version
+        shell: pwsh
+        run: ./build.ps1 -Task All -ReleaseTag $env:GITHUB_REF_NAME
+
+      - name: Stage curated release notes
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $archives = @(Get-ChildItem -Path ./out/incident-capsule-*.zip -File -ErrorAction Stop)
-          $checksums = @(Get-ChildItem -Path ./out/incident-capsule-*.zip.sha256 -File -ErrorAction Stop)
+
+          $tag = $env:GITHUB_REF_NAME
+          $version = $tag.Substring(1)
+          $sourcePath = Join-Path ./release-notes "$tag.md"
+          $destinationPath = Join-Path ./out "incident-capsule-$version.release-notes.md"
+
+          if (-not (Test-Path -LiteralPath $sourcePath -PathType Leaf)) {
+              throw "Curated release notes are missing: $sourcePath"
+          }
+
+          $notes = Get-Content -LiteralPath $sourcePath -Raw -ErrorAction Stop
+          if ([string]::IsNullOrWhiteSpace($notes)) {
+              throw "Curated release notes are empty: $sourcePath"
+          }
+
+          Copy-Item -LiteralPath $sourcePath -Destination $destinationPath
+
+      - name: Validate release asset set
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          $archives = @(Get-ChildItem ./out/incident-capsule-*.zip -File)
+          $checksums = @(Get-ChildItem ./out/incident-capsule-*.zip.sha256 -File)
+          $releaseNotes = @(Get-ChildItem ./out/incident-capsule-*.release-notes.md -File)
 
           if ($archives.Count -ne 1) {
               throw "Expected exactly one release archive, found $($archives.Count)."
           }
+
           if ($checksums.Count -ne 1) {
               throw "Expected exactly one checksum file, found $($checksums.Count)."
           }
 
-      - name: Publish immutable GitHub release
-        if: steps.version.outputs.publish == 'true'
+          if ($releaseNotes.Count -ne 1) {
+              throw "Expected exactly one curated release-notes file, found $($releaseNotes.Count)."
+          }
+          Write-Host "Archive: $($archives[0].Name)"
+          Write-Host "Checksum: $($checksums[0].Name)"
+          Write-Host "Release notes: $($releaseNotes[0].Name)"
+
+      - name: Attest release assets
+        uses: actions/attest@v4
+        with:
+          subject-path: |
+            ${{ github.workspace }}/out/incident-capsule-*.zip
+            ${{ github.workspace }}/out/incident-capsule-*.zip.sha256
+
+      - name: Store validated release assets
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-assets
+          path: |
+            out/incident-capsule-*.zip
+            out/incident-capsule-*.zip.sha256
+            out/incident-capsule-*.release-notes.md
+          if-no-files-found: error
+          retention-days: 7
+
+  publish-release:
+    name: Publish immutable GitHub release
+    needs: validate-package
+    runs-on: windows-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download validated release assets
+        uses: actions/download-artifact@v8
+        with:
+          name: release-assets
+          path: release-assets
+
+      - name: Publish new GitHub release
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+          GH_REPO: ${{ github.repository }}
         run: |
           $ErrorActionPreference = 'Stop'
+
+          $tag = $env:GITHUB_REF_NAME
+          $releaseNotes = @(
+              Get-ChildItem `
+                -Path ./release-assets/incident-capsule-*.release-notes.md `
+                -File
+          )
           $assetPaths = @(
               Get-ChildItem `
-                -Path ./out/incident-capsule-*.zip, ./out/incident-capsule-*.zip.sha256 `
+                -Path ./release-assets/incident-capsule-*.zip, ./release-assets/incident-capsule-*.zip.sha256 `
                 -File |
               Sort-Object FullName |
               Select-Object -ExpandProperty FullName
           )
 
-          $notesPath = Join-Path './release-notes' "$env:RELEASE_TAG.md"
-          $arguments = @(
-              'release', 'create', $env:RELEASE_TAG,
-              '--target', $env:GITHUB_SHA,
-              '--title', "Incident Capsule $env:RELEASE_TAG"
-          )
-          if (Test-Path -LiteralPath $notesPath -PathType Leaf) {
-              $arguments += @('--notes-file', $notesPath)
+          if ($assetPaths.Count -ne 2) {
+              throw "Expected exactly two release assets, found $($assetPaths.Count)."
           }
-          else {
-              $arguments += '--generate-notes'
-          }
-          $arguments += $assetPaths
 
-          & gh @arguments
+          if ($releaseNotes.Count -ne 1) {
+              throw "Expected exactly one curated release-notes file, found $($releaseNotes.Count)."
+          }
+          $releaseNotesPath = $releaseNotes[0].FullName
+
+          $archivePath = @($assetPaths | Where-Object { $_ -match '\.zip$' })[0]
+          $checksumPath = "$archivePath.sha256"
+          $checksumLine = (Get-Content -LiteralPath $checksumPath -Raw).Trim()
+
+          if ($checksumLine -notmatch '^(?<Hash>[0-9a-fA-F]{64})  (?<File>[^\\/]+)$') {
+              throw "Invalid checksum sidecar format: $checksumPath"
+          }
+
+          if ($Matches['File'] -ne (Split-Path -Leaf $archivePath)) {
+              throw 'Checksum sidecar names a different release archive.'
+          }
+
+          $actualHash = (Get-FileHash -LiteralPath $archivePath -Algorithm SHA256).Hash
+          if ($actualHash -ne $Matches['Hash']) {
+              throw 'Downloaded release asset does not match its SHA-256 sidecar.'
+          }
+
+          $previousPreference = $ErrorActionPreference
+          $ErrorActionPreference = 'Continue'
+          gh release view $tag --json tagName *> $null
+          $releaseExists = $LASTEXITCODE -eq 0
+          $ErrorActionPreference = $previousPreference
+
+          if ($releaseExists) {
+              throw (
+                  "Release '$tag' already exists. Published release assets are immutable " +
+                  'and will not be overwritten.'
+              )
+          }
+
+          gh release create `
+            $tag `
+            @assetPaths `
+            --verify-tag `
+            --notes-file $releaseNotesPath `
+            --title "Incident Capsule $tag"
+
           if ($LASTEXITCODE -ne 0) {
-              throw "GitHub release creation failed with exit code $LASTEXITCODE."
+              throw "GitHub release command failed with exit code $LASTEXITCODE."
           }

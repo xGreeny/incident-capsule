@@ -4,10 +4,13 @@ $moduleManifestData = Import-PowerShellDataFile -LiteralPath $moduleManifestPath
 
 $script:ICName = 'Incident Capsule'
 $script:ICVersion = [string]$moduleManifestData.ModuleVersion
-$script:ICSchemaVersion = '1.0'
+$script:ICSchemaVersion = '1.1'
 $script:ICCollectorSchema = "https://raw.githubusercontent.com/xGreeny/incident-capsule/v$($script:ICVersion)/docs/schemas/collector-envelope.schema.json"
 $script:ICCapsuleSchema = "https://raw.githubusercontent.com/xGreeny/incident-capsule/v$($script:ICVersion)/docs/schemas/capsule.schema.json"
 $script:ICManifestSchema = "https://raw.githubusercontent.com/xGreeny/incident-capsule/v$($script:ICVersion)/docs/schemas/manifest.schema.json"
+$script:ICCoverageSchema = "https://raw.githubusercontent.com/xGreeny/incident-capsule/v$($script:ICVersion)/docs/schemas/coverage.schema.json"
+$script:ICTimelineSchema = "https://raw.githubusercontent.com/xGreeny/incident-capsule/v$($script:ICVersion)/docs/schemas/timeline.schema.json"
+$script:ICVerificationReceiptSchema = "https://raw.githubusercontent.com/xGreeny/incident-capsule/v$($script:ICVersion)/docs/schemas/verification-receipt.schema.json"
 
 $script:ICCollectorDefinitions = [ordered]@{
     System = [ordered]@{
@@ -77,6 +80,12 @@ $script:ICConfigurationKeys = @(
     'EventLogs',
     'EventLookbackHours',
     'MaximumEventsPerLog',
+    'MaximumCapsuleBytes',
+    'MaximumEvtxBytesPerLog',
+    'NativeCommandTimeoutSeconds',
+    'MaximumNativeOutputBytes',
+    'MaximumTimelineEntries',
+    'DataHandlingProfile',
     'ExportEvtx',
     'ExportScheduledTaskXml',
     'IncludeProcessCommandLines',
@@ -97,15 +106,20 @@ $script:ICConfigurationKeys = @(
     'MaximumArchiveCompressionRatio'
 )
 
-$script:ICConfigurationMaximums = [ordered]@{
-    EventLookbackHours              = 720L
-    MaximumEventsPerLog             = 100000L
-    MaximumExecutableHashes         = 5000L
-    MaximumWindowsUpdateHistory     = 10000L
-    MaximumSignedDrivers            = 50000L
-    MaximumFirewallRules            = 50000L
-    MaximumArchiveEntries           = 50000L
-    MaximumArchiveEntryBytes        = 2147483648L
-    MaximumArchiveExpandedBytes     = 21474836480L
-    MaximumArchiveCompressionRatio  = 1000L
+$script:ICConfigurationLimits = [ordered]@{
+    EventLookbackHours          = [ordered]@{ Minimum = 1L; Maximum = 720L }
+    MaximumEventsPerLog         = [ordered]@{ Minimum = 1L; Maximum = 100000L }
+    MaximumCapsuleBytes         = [ordered]@{ Minimum = 1048576L; Maximum = 1099511627776L }
+    MaximumEvtxBytesPerLog      = [ordered]@{ Minimum = 1048576L; Maximum = 4294967296L }
+    NativeCommandTimeoutSeconds = [ordered]@{ Minimum = 1L; Maximum = 900L }
+    MaximumNativeOutputBytes    = [ordered]@{ Minimum = 1024L; Maximum = 1073741824L }
+    MaximumTimelineEntries      = [ordered]@{ Minimum = 1L; Maximum = 5000000L }
+    MaximumExecutableHashes     = [ordered]@{ Minimum = 1L; Maximum = 10000L }
+    MaximumWindowsUpdateHistory = [ordered]@{ Minimum = 1L; Maximum = 10000L }
+    MaximumSignedDrivers        = [ordered]@{ Minimum = 1L; Maximum = 100000L }
+    MaximumFirewallRules        = [ordered]@{ Minimum = 1L; Maximum = 100000L }
+    MaximumArchiveEntries       = [ordered]@{ Minimum = 1L; Maximum = 50000L }
+    MaximumArchiveEntryBytes    = [ordered]@{ Minimum = 1L; Maximum = 1099511627776L }
+    MaximumArchiveExpandedBytes = [ordered]@{ Minimum = 1L; Maximum = 8796093022208L }
+    MaximumArchiveCompressionRatio = [ordered]@{ Minimum = 1L; Maximum = 1000L }
 }

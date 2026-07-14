@@ -31,21 +31,72 @@ Describe 'Incident Capsule IO helpers' {
             [System.IO.File]::ReadAllText($path) | Should -Be 'capsule'
         }
 
-
-        It 'replaces an existing file without leaving a temporary artifact' {
+        It 'atomically replaces an existing file without leaving staging artifacts' {
             $path = Join-Path $TestDrive 'atomic.txt'
             Write-ICUtf8File -Path $path -Content 'first' | Out-Null
             Write-ICUtf8File -Path $path -Content 'second' | Out-Null
+
             [System.IO.File]::ReadAllText($path) | Should -Be 'second'
-            @(Get-ChildItem -LiteralPath $TestDrive -Filter '*.tmp' -Force).Count | Should -Be 0
+            @(Get-ChildItem -LiteralPath $TestDrive -Force | Where-Object Name -Match '\.(partial|backup)$').Count | Should -Be 0
         }
 
-        It 'prefixes spreadsheet formula values in derived CSV output' {
+        It 'neutralizes spreadsheet formulas in CSV without mutating source data' {
+            $row = [pscustomobject]@{
+                Name   = 'sample'
+                Value  = '=cmd|'' /C calc''!A0'
+                Number = -1
+            }
             $path = Join-Path $TestDrive 'safe.csv'
-            $rows = @([pscustomobject]@{ Name = '=2+2'; Safe = 'value' })
-            Write-ICCsvFile -Path $path -InputObject $rows -SpreadsheetSafe $true | Out-Null
-            $content = Get-Content -LiteralPath $path -Raw
-            $content | Should -Match "'=2\+2"
+            Write-ICCsvFile -Path $path -InputObject @($row) | Out-Null
+
+            $imported = Import-Csv -LiteralPath $path
+            $imported.Value | Should -Be "'=cmd|' /C calc'!A0"
+            $imported.Number | Should -Be '-1'
+            $row.Value | Should -Be '=cmd|'' /C calc''!A0'
+        }
+
+        It 'retains the released SpreadsheetSafe switch and supports dictionary rows' {
+            $unsafePath = Join-Path $TestDrive 'unsafe.csv'
+            $safePath = Join-Path $TestDrive 'dictionary-safe.csv'
+            $row = [ordered]@{ Name = 'sample'; Value = '  @SUM(A1:A2)' }
+
+            Write-ICCsvFile -Path $unsafePath -InputObject @($row) -SpreadsheetSafe $false | Out-Null
+            Write-ICCsvFile -Path $safePath -InputObject @($row) -SpreadsheetSafe $true | Out-Null
+
+            (Import-Csv -LiteralPath $unsafePath).Value | Should -Be '  @SUM(A1:A2)'
+            (Import-Csv -LiteralPath $safePath).Value | Should -Be "'  @SUM(A1:A2)"
+            $row.Value | Should -Be '  @SUM(A1:A2)'
+        }
+
+        It 'terminates native commands that exceed the configured timeout' {
+            $hostExecutable = (Get-Process -Id $PID).Path
+            $context = [pscustomobject]@{
+                Configuration = [ordered]@{
+                    NativeCommandTimeoutSeconds = 1
+                    MaximumNativeOutputBytes    = 4096
+                }
+            }
+
+            $result = Invoke-ICNativeCommand `
+                -FilePath $hostExecutable `
+                -ArgumentList @('-NoProfile', '-Command', 'Start-Sleep -Seconds 5') `
+                -Context $context
+
+            $result.TimedOut | Should -BeTrue
+            $result.Error | Should -Match 'timed out'
+        }
+
+        It 'bounds captured native output and reports truncation' {
+            $hostExecutable = (Get-Process -Id $PID).Path
+            $result = Invoke-ICNativeCommand `
+                -FilePath $hostExecutable `
+                -ArgumentList @('-NoProfile', '-Command', '[Console]::Out.Write("x" * 20000)') `
+                -TimeoutSeconds 10 `
+                -MaximumOutputBytes 1024
+
+            $result.OutputTruncated | Should -BeTrue
+            $result.OutputBytes | Should -Be 1024
+            $result.Error | Should -Match 'output limit'
         }
     }
 }

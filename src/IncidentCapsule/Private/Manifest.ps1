@@ -1,128 +1,148 @@
-function ConvertTo-ICValidatedRelativePath {
+function Test-ICObjectProperty {
     [CmdletBinding()]
     param(
-        [Parameter(Mandatory)]
-        [string]$RelativePath,
+        [AllowNull()]
+        [object]$InputObject,
 
-        [switch]$AllowDirectory
+        [Parameter(Mandatory)]
+        [string]$Name
     )
 
-    if ([string]::IsNullOrWhiteSpace($RelativePath) -or $RelativePath.IndexOf([char]0) -ge 0) {
-        throw 'A manifest or archive path cannot be empty or contain a null character.'
+    if ($null -eq $InputObject) {
+        return $false
     }
-
-    $normalized = $RelativePath.Replace('\', '/')
-    if ($AllowDirectory) {
-        $normalized = $normalized.TrimEnd('/')
+    if ($InputObject -is [System.Collections.IDictionary]) {
+        return $InputObject.Contains($Name)
     }
-
-    if ([string]::IsNullOrWhiteSpace($normalized)) {
-        throw "Path '$RelativePath' does not identify a file or directory."
-    }
-    if ($normalized.StartsWith('/') -or $normalized.StartsWith('//') -or $normalized -match '^[A-Za-z]:') {
-        throw "Path '$RelativePath' must be relative."
-    }
-    if ($normalized.Contains(':')) {
-        throw "Path '$RelativePath' contains an unsupported colon or alternate-data-stream separator."
-    }
-
-    $segments = @($normalized.Split('/'))
-    if ($segments.Count -eq 0 -or @($segments | Where-Object { $_ -in @('', '.', '..') }).Count -gt 0) {
-        throw "Path '$RelativePath' contains an empty, current-directory, or parent-directory segment."
-    }
-
-    return ($segments -join '/')
+    return $null -ne $InputObject.PSObject.Properties[$Name]
 }
 
-function Resolve-ICContainedPath {
+function Resolve-ICSafeRelativePath {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
-        [string]$BasePath,
-
-        [Parameter(Mandatory)]
         [string]$RelativePath,
 
-        [switch]$AllowDirectory
+        [Parameter(Mandatory)]
+        [string]$RootPath,
+
+        [string]$Description = 'Path'
     )
 
-    $safeRelativePath = ConvertTo-ICValidatedRelativePath -RelativePath $RelativePath -AllowDirectory:$AllowDirectory
-    $baseFull = [System.IO.Path]::GetFullPath($BasePath).TrimEnd([char]'\', [char]'/')
-    $platformRelative = $safeRelativePath.Replace('/', [System.IO.Path]::DirectorySeparatorChar)
-    $fullPath = [System.IO.Path]::GetFullPath((Join-Path $baseFull $platformRelative))
-    $prefix = $baseFull + [System.IO.Path]::DirectorySeparatorChar
+    if ([string]::IsNullOrWhiteSpace($RelativePath)) {
+        throw "$Description cannot be empty."
+    }
+    if ($RelativePath.Length -gt 1024) {
+        throw "$Description exceeds the 1024-character safety limit."
+    }
+    if ($RelativePath.IndexOf([char]0) -ge 0) {
+        throw "$Description contains a NUL character."
+    }
+    if ([System.IO.Path]::IsPathRooted($RelativePath) -or $RelativePath -match '^[A-Za-z]:') {
+        throw "$Description '$RelativePath' must be relative."
+    }
 
-    if (-not $fullPath.StartsWith($prefix, [System.StringComparison]::OrdinalIgnoreCase)) {
-        throw "Path '$RelativePath' resolves outside base path '$baseFull'."
+    $normalized = $RelativePath.Replace([char]'\', [char]'/')
+    if ($normalized.StartsWith('/') -or $normalized.EndsWith('/')) {
+        throw "$Description '$RelativePath' has an empty path segment."
+    }
+
+    $segments = @($normalized -split '/')
+    if ($segments.Count -eq 0) {
+        throw "$Description '$RelativePath' is invalid."
+    }
+    foreach ($segment in $segments) {
+        if ([string]::IsNullOrEmpty($segment) -or $segment -eq '.' -or $segment -eq '..') {
+            throw "$Description '$RelativePath' contains an unsafe path segment."
+        }
+        if ($segment.Length -gt 255) {
+            throw "$Description '$RelativePath' contains a path segment longer than 255 characters."
+        }
+        if ($segment -match '[<>:"|?*\x00-\x1f]' -or $segment -match '[\. ]$') {
+            throw "$Description '$RelativePath' contains characters that are unsafe on Windows."
+        }
+        if ($segment -match '^(?i:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\..*)?$') {
+            throw "$Description '$RelativePath' contains a reserved Windows device name."
+        }
+    }
+
+    $rootFull = [System.IO.Path]::GetFullPath($RootPath).TrimEnd([char]'\', [char]'/')
+    $candidate = [System.IO.Path]::GetFullPath((Join-Path $rootFull ($normalized -replace '/', [System.IO.Path]::DirectorySeparatorChar)))
+    $rootPrefix = $rootFull + [System.IO.Path]::DirectorySeparatorChar
+    if (-not $candidate.StartsWith($rootPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "$Description '$RelativePath' resolves outside '$rootFull'."
     }
 
     return [pscustomobject][ordered]@{
-        RelativePath = $safeRelativePath
-        FullPath     = $fullPath
+        RelativePath = $normalized
+        FullPath     = $candidate
+        Segments     = @($segments)
     }
 }
 
-function Assert-ICPathHasNoReparsePoint {
+function Assert-ICNoReparsePoint {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
-        [string]$BasePath,
+        [string]$RootPath,
 
         [Parameter(Mandatory)]
-        [string]$FullPath
+        [string]$Path
     )
 
-    $baseFull = [System.IO.Path]::GetFullPath($BasePath).TrimEnd([char]'\', [char]'/')
-    $targetFull = [System.IO.Path]::GetFullPath($FullPath)
-    $current = $baseFull
-
-    $baseItem = Get-Item -LiteralPath $baseFull -Force -ErrorAction Stop
-    if (($baseItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
-        throw "Base path '$baseFull' is a reparse point."
+    $rootFull = [System.IO.Path]::GetFullPath($RootPath).TrimEnd([char]'\', [char]'/')
+    $pathFull = [System.IO.Path]::GetFullPath($Path)
+    $rootPrefix = $rootFull + [System.IO.Path]::DirectorySeparatorChar
+    if ($pathFull -ne $rootFull -and -not $pathFull.StartsWith($rootPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "Path '$pathFull' is outside capsule root '$rootFull'."
     }
 
-    $relative = $targetFull.Substring($baseFull.Length).TrimStart([char]'\', [char]'/')
-    foreach ($segment in @($relative -split '[\\/]')) {
-        if ([string]::IsNullOrWhiteSpace($segment)) {
-            continue
+    $paths = New-Object System.Collections.Generic.List[string]
+    $paths.Add($rootFull)
+    if ($pathFull -ne $rootFull) {
+        $relative = $pathFull.Substring($rootPrefix.Length)
+        $current = $rootFull
+        foreach ($segment in @($relative -split '[\\/]')) {
+            $current = Join-Path $current $segment
+            $paths.Add($current)
         }
-        $current = Join-Path $current $segment
-        if (Test-Path -LiteralPath $current) {
-            $item = Get-Item -LiteralPath $current -Force -ErrorAction Stop
-            if (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
-                throw "Path '$current' is a reparse point and is not accepted as capsule evidence."
-            }
+    }
+
+    foreach ($candidate in $paths) {
+        if (-not (Test-Path -LiteralPath $candidate)) {
+            break
+        }
+        $item = Get-Item -LiteralPath $candidate -Force -ErrorAction Stop
+        if (([int]$item.Attributes -band [int][System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw "Reparse point '$candidate' is not permitted inside a capsule."
         }
     }
 }
 
-function Get-ICSafeTreeFiles {
+function Get-ICSafeCapsuleFile {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
-        [string]$RootPath
+        [string]$CapsuleRoot
     )
 
-    $root = Get-Item -LiteralPath $RootPath -Force -ErrorAction Stop
-    if (($root.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
-        throw "Capsule root '$RootPath' is a reparse point."
-    }
+    $rootFull = [System.IO.Path]::GetFullPath($CapsuleRoot).TrimEnd([char]'\', [char]'/')
+    Assert-ICNoReparsePoint -RootPath $rootFull -Path $rootFull
 
-    $directories = New-Object 'System.Collections.Generic.Queue[System.IO.DirectoryInfo]'
-    $directories.Enqueue([System.IO.DirectoryInfo]$root)
+    $directories = New-Object 'System.Collections.Generic.Queue[string]'
+    $directories.Enqueue($rootFull)
     $files = New-Object System.Collections.ArrayList
-
     while ($directories.Count -gt 0) {
         $directory = $directories.Dequeue()
-        foreach ($item in $directory.EnumerateFileSystemInfos()) {
-            if (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
-                throw "Capsule path '$($item.FullName)' is a reparse point."
+        foreach ($item in Get-ChildItem -LiteralPath $directory -Force -ErrorAction Stop) {
+            if (([int]$item.Attributes -band [int][System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+                throw "Reparse point '$($item.FullName)' is not permitted inside a capsule."
             }
-            if (($item.Attributes -band [System.IO.FileAttributes]::Directory) -ne 0) {
-                $directories.Enqueue([System.IO.DirectoryInfo]$item)
+            if ($item.PSIsContainer) {
+                $directories.Enqueue($item.FullName)
             }
             else {
-                [void]$files.Add([System.IO.FileInfo]$item)
+                [void]$files.Add($item)
             }
         }
     }
@@ -139,7 +159,7 @@ function Get-ICManifestFiles {
 
     $excluded = @('metadata/manifest.json', 'metadata/manifest.sha256')
     return @(
-        Get-ICSafeTreeFiles -RootPath $CapsuleRoot |
+        Get-ICSafeCapsuleFile -CapsuleRoot $CapsuleRoot |
             ForEach-Object {
                 $relative = Get-ICRelativePath -BasePath $CapsuleRoot -Path $_.FullName
                 if ($relative -notin $excluded) {
@@ -167,6 +187,7 @@ function New-ICManifest {
     if (-not (Test-Path -LiteralPath $metadataDirectory)) {
         New-Item -ItemType Directory -Path $metadataDirectory -Force | Out-Null
     }
+    Assert-ICNoReparsePoint -RootPath $CapsuleRoot -Path $metadataDirectory
 
     $entries = New-Object System.Collections.ArrayList
     foreach ($entry in Get-ICManifestFiles -CapsuleRoot $CapsuleRoot) {
@@ -209,29 +230,71 @@ function New-ICArchive {
         [string]$CapsuleRoot
     )
 
+    Add-Type -AssemblyName System.IO.Compression -ErrorAction Stop
     Add-Type -AssemblyName System.IO.Compression.FileSystem -ErrorAction Stop
 
-    $archivePath = "$CapsuleRoot.zip"
+    $rootFull = [System.IO.Path]::GetFullPath($CapsuleRoot).TrimEnd([char]'\', [char]'/')
+    $archivePath = "$rootFull.zip"
+    $sidecarPath = "$archivePath.sha256"
     if (Test-Path -LiteralPath $archivePath) {
-        Remove-Item -LiteralPath $archivePath -Force
+        throw "Archive '$archivePath' already exists."
+    }
+    if (Test-Path -LiteralPath $sidecarPath) {
+        throw "Archive sidecar '$sidecarPath' already exists."
     }
 
-    [System.IO.Compression.ZipFile]::CreateFromDirectory(
-        $CapsuleRoot,
-        $archivePath,
-        [System.IO.Compression.CompressionLevel]::Optimal,
-        $false
-    )
+    $archiveDirectory = [System.IO.Path]::GetDirectoryName($archivePath)
+    $temporaryPath = Join-Path $archiveDirectory ('.{0}.{1}.partial' -f [System.IO.Path]::GetFileName($archivePath), [guid]::NewGuid().ToString('N'))
+    try {
+        $files = @(Get-ICSafeCapsuleFile -CapsuleRoot $rootFull | Sort-Object FullName)
+        $archive = [System.IO.Compression.ZipFile]::Open($temporaryPath, [System.IO.Compression.ZipArchiveMode]::Create)
+        try {
+            foreach ($file in $files) {
+                Assert-ICNoReparsePoint -RootPath $rootFull -Path $file.FullName
+                $relativePath = Get-ICRelativePath -BasePath $rootFull -Path $file.FullName
+                $zipEntry = $archive.CreateEntry($relativePath, [System.IO.Compression.CompressionLevel]::Optimal)
+                if ($file.LastWriteTimeUtc.Year -ge 1980 -and $file.LastWriteTimeUtc.Year -le 2107) {
+                    $zipEntry.LastWriteTime = New-Object System.DateTimeOffset($file.LastWriteTimeUtc)
+                }
 
-    $hash = Get-FileHash -LiteralPath $archivePath -Algorithm SHA256 -ErrorAction Stop
-    $sidecarPath = "$archivePath.sha256"
-    $line = '{0}  {1}' -f $hash.Hash.ToLowerInvariant(), (Split-Path -Leaf $archivePath)
-    [void](Write-ICUtf8File -Path $sidecarPath -Content ($line + [Environment]::NewLine))
+                $sourceStream = $null
+                $destinationStream = $null
+                try {
+                    $sourceStream = New-Object System.IO.FileStream(
+                        $file.FullName,
+                        [System.IO.FileMode]::Open,
+                        [System.IO.FileAccess]::Read,
+                        [System.IO.FileShare]::Read
+                    )
+                    $destinationStream = $zipEntry.Open()
+                    $sourceStream.CopyTo($destinationStream)
+                }
+                finally {
+                    if ($null -ne $sourceStream) { $sourceStream.Dispose() }
+                    if ($null -ne $destinationStream) { $destinationStream.Dispose() }
+                }
+            }
+        }
+        finally {
+            $archive.Dispose()
+        }
 
-    return [pscustomobject][ordered]@{
-        ArchivePath = $archivePath
-        SidecarPath = $sidecarPath
-        SHA256      = $hash.Hash.ToLowerInvariant()
+        $hash = Get-FileHash -LiteralPath $temporaryPath -Algorithm SHA256 -ErrorAction Stop
+        [System.IO.File]::Move($temporaryPath, $archivePath)
+
+        $line = '{0}  {1}' -f $hash.Hash.ToLowerInvariant(), (Split-Path -Leaf $archivePath)
+        [void](Write-ICUtf8File -Path $sidecarPath -Content ($line + [Environment]::NewLine))
+
+        return [pscustomobject][ordered]@{
+            ArchivePath = $archivePath
+            SidecarPath = $sidecarPath
+            SHA256      = $hash.Hash.ToLowerInvariant()
+        }
+    }
+    finally {
+        if (Test-Path -LiteralPath $temporaryPath -PathType Leaf) {
+            Remove-Item -LiteralPath $temporaryPath -Force -ErrorAction SilentlyContinue
+        }
     }
 }
 
@@ -242,24 +305,140 @@ function Find-ICManifestRoot {
         [string]$Path
     )
 
-    $direct = Join-Path $Path 'metadata/manifest.json'
+    $root = [System.IO.Path]::GetFullPath($Path).TrimEnd([char]'\', [char]'/')
+    Assert-ICNoReparsePoint -RootPath $root -Path $root
+    $direct = Join-Path $root 'metadata/manifest.json'
+    Assert-ICNoReparsePoint -RootPath $root -Path $direct
     if (Test-Path -LiteralPath $direct -PathType Leaf) {
-        Assert-ICPathHasNoReparsePoint -BasePath $Path -FullPath $direct
-        return [System.IO.Path]::GetFullPath($Path)
+        return $root
     }
 
-    $manifests = New-Object System.Collections.ArrayList
-    foreach ($file in Get-ICSafeTreeFiles -RootPath $Path) {
-        if ($file.Name -eq 'manifest.json' -and $file.Directory.Name -eq 'metadata') {
-            [void]$manifests.Add($file)
-        }
-    }
+    $files = @(Get-ICSafeCapsuleFile -CapsuleRoot $root)
+    $manifests = @($files | Where-Object {
+        $_.Name -eq 'manifest.json' -and (Split-Path -Leaf (Split-Path -Parent $_.FullName)) -eq 'metadata'
+    })
 
     if ($manifests.Count -ne 1) {
-        throw "Expected exactly one metadata/manifest.json below '$Path'; found $($manifests.Count)."
+        throw "Expected exactly one metadata/manifest.json below '$root'; found $($manifests.Count)."
     }
 
-    return Split-Path -Parent (Split-Path -Parent $manifests[0].FullName)
+    $manifestRoot = Split-Path -Parent (Split-Path -Parent $manifests[0].FullName)
+    $manifestRootFull = [System.IO.Path]::GetFullPath($manifestRoot).TrimEnd([char]'\', [char]'/')
+    $manifestRootPrefix = $manifestRootFull + [System.IO.Path]::DirectorySeparatorChar
+    $outsideFiles = @($files | Where-Object {
+        -not $_.FullName.StartsWith($manifestRootPrefix, [System.StringComparison]::OrdinalIgnoreCase)
+    })
+    if ($outsideFiles.Count -gt 0) {
+        throw "Found $($outsideFiles.Count) file(s) outside the directory containing metadata/manifest.json."
+    }
+
+    return $manifestRootFull
+}
+
+function Read-ICValidatedManifest {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$CapsuleRoot
+    )
+
+    $root = [System.IO.Path]::GetFullPath($CapsuleRoot).TrimEnd([char]'\', [char]'/')
+    $manifestPath = Join-Path $root 'metadata/manifest.json'
+    Assert-ICNoReparsePoint -RootPath $root -Path $manifestPath
+    if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
+        throw "Manifest not found at '$manifestPath'."
+    }
+
+    try {
+        $manifest = Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8 -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+    }
+    catch {
+        throw "Manifest '$manifestPath' is not valid JSON: $($_.Exception.Message)"
+    }
+
+    if ($null -eq $manifest -or $manifest -is [System.Array]) {
+        throw "Manifest '$manifestPath' must contain one JSON object."
+    }
+    if (-not (Test-ICObjectProperty -InputObject $manifest -Name 'schemaVersion')) {
+        throw "Manifest '$manifestPath' does not contain a schemaVersion."
+    }
+    $schemaVersion = [string](Get-ICPropertyValue -InputObject $manifest -Name 'schemaVersion')
+    if ($schemaVersion -notin @('1.0', '1.1')) {
+        throw "Manifest '$manifestPath' uses unsupported schema version '$schemaVersion'."
+    }
+    if (-not (Test-ICObjectProperty -InputObject $manifest -Name 'algorithm') -or [string]$manifest.algorithm -ne 'SHA-256') {
+        throw "Manifest '$manifestPath' must specify the SHA-256 algorithm."
+    }
+    if (-not (Test-ICObjectProperty -InputObject $manifest -Name 'capsuleId') -or [string]::IsNullOrWhiteSpace([string]$manifest.capsuleId)) {
+        throw "Manifest '$manifestPath' does not contain a valid capsuleId."
+    }
+    if (-not (Test-ICObjectProperty -InputObject $manifest -Name 'files')) {
+        throw "Manifest '$manifestPath' does not contain a files array."
+    }
+    $rawFiles = $manifest.PSObject.Properties['files'].Value
+    if ($null -eq $rawFiles -or $rawFiles -isnot [System.Array]) {
+        throw "Manifest '$manifestPath' files value must be an array."
+    }
+
+    $validatedEntries = New-Object System.Collections.ArrayList
+    $expectedPaths = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
+    $index = -1
+    foreach ($entry in @($rawFiles)) {
+        $index++
+        if ($null -eq $entry -or $entry -is [string]) {
+            throw "Manifest file entry $index must be an object."
+        }
+        foreach ($required in @('path', 'length', 'lastWriteTimeUtc', 'sha256')) {
+            if (-not (Test-ICObjectProperty -InputObject $entry -Name $required)) {
+                throw "Manifest file entry $index is missing '$required'."
+            }
+        }
+
+        $validatedPath = Resolve-ICSafeRelativePath -RelativePath ([string]$entry.path) -RootPath $root -Description "Manifest path at index $index"
+        if ($validatedPath.RelativePath -in @('metadata/manifest.json', 'metadata/manifest.sha256')) {
+            throw "Manifest file entry $index references a manifest control file."
+        }
+        if (-not $expectedPaths.Add($validatedPath.RelativePath)) {
+            throw "Manifest contains a duplicate or case-colliding path '$($validatedPath.RelativePath)'."
+        }
+
+        $lengthValue = Get-ICPropertyValue -InputObject $entry -Name 'length'
+        if ($lengthValue -isnot [byte] -and $lengthValue -isnot [int16] -and $lengthValue -isnot [int32] -and $lengthValue -isnot [int64] -and
+            $lengthValue -isnot [uint16] -and $lengthValue -isnot [uint32]) {
+            throw "Manifest file entry '$($validatedPath.RelativePath)' has a non-integer length."
+        }
+        if ([int64]$lengthValue -lt 0) {
+            throw "Manifest file entry '$($validatedPath.RelativePath)' has a negative length."
+        }
+
+        $hash = [string](Get-ICPropertyValue -InputObject $entry -Name 'sha256')
+        if ($hash -cnotmatch '^[a-fA-F0-9]{64}$') {
+            throw "Manifest file entry '$($validatedPath.RelativePath)' has an invalid SHA-256 value."
+        }
+
+        $lastWrite = [string](Get-ICPropertyValue -InputObject $entry -Name 'lastWriteTimeUtc')
+        $parsedDate = [datetime]::MinValue
+        if (-not [datetime]::TryParse(
+            $lastWrite,
+            [System.Globalization.CultureInfo]::InvariantCulture,
+            [System.Globalization.DateTimeStyles]::RoundtripKind,
+            [ref]$parsedDate
+        )) {
+            throw "Manifest file entry '$($validatedPath.RelativePath)' has an invalid lastWriteTimeUtc value."
+        }
+
+        [void]$validatedEntries.Add([pscustomobject][ordered]@{
+            Path           = $validatedPath.RelativePath
+            FullPath       = $validatedPath.FullPath
+            ExpectedLength = [int64]$lengthValue
+            ExpectedSHA256 = $hash.ToLowerInvariant()
+        })
+    }
+
+    return [pscustomobject][ordered]@{
+        Manifest = $manifest
+        Entries  = @($validatedEntries)
+    }
 }
 
 function Test-ICChecksumList {
@@ -277,9 +456,16 @@ function Test-ICChecksumList {
         return $false
     }
 
-    $expected = @{}
+    Assert-ICNoReparsePoint -RootPath $CapsuleRoot -Path $checksumPath
+    $expected = New-Object 'System.Collections.Generic.Dictionary[string,string]' ([System.StringComparer]::OrdinalIgnoreCase)
     foreach ($entry in @($ManifestEntries)) {
-        $expected[[string]$entry.path] = ([string]$entry.sha256).ToLowerInvariant()
+        $path = [string](Get-ICPropertyValue -InputObject $entry -Name 'Path' -Default (Get-ICPropertyValue -InputObject $entry -Name 'path'))
+        $hash = [string](Get-ICPropertyValue -InputObject $entry -Name 'ExpectedSHA256' -Default (Get-ICPropertyValue -InputObject $entry -Name 'sha256'))
+        $validated = Resolve-ICSafeRelativePath -RelativePath $path -RootPath $CapsuleRoot -Description 'Checksum-list path'
+        if ($hash -cnotmatch '^[a-fA-F0-9]{64}$' -or $expected.ContainsKey($validated.RelativePath)) {
+            return $false
+        }
+        $expected.Add($validated.RelativePath, $hash.ToLowerInvariant())
     }
 
     $seen = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
@@ -292,10 +478,14 @@ function Test-ICChecksumList {
         }
 
         $hash = $Matches[1].ToLowerInvariant()
-        $path = ConvertTo-ICValidatedRelativePath -RelativePath $Matches[2]
-        if (-not $seen.Add($path)) {
+        try {
+            $validated = Resolve-ICSafeRelativePath -RelativePath $Matches[2] -RootPath $CapsuleRoot -Description 'Checksum-list path'
+        }
+        catch {
             return $false
         }
+        $path = $validated.RelativePath
+        if (-not $seen.Add($path)) { return $false }
         if (-not $expected.ContainsKey($path) -or $expected[$path] -ne $hash) {
             return $false
         }
@@ -311,77 +501,45 @@ function Test-ICDirectoryIntegrity {
         [string]$CapsuleRoot
     )
 
-    $rootFull = [System.IO.Path]::GetFullPath($CapsuleRoot)
-    $manifestPath = Join-Path $rootFull 'metadata/manifest.json'
-    if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
-        throw "Manifest not found at '$manifestPath'."
-    }
-
-    Assert-ICPathHasNoReparsePoint -BasePath $rootFull -FullPath $manifestPath
-    $manifest = Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
-    if ([string]$manifest.schemaVersion -ne $script:ICSchemaVersion) {
-        throw "Unsupported manifest schema version '$($manifest.schemaVersion)'."
-    }
-    if ([string]$manifest.algorithm -ne 'SHA-256') {
-        throw "Unsupported manifest algorithm '$($manifest.algorithm)'."
-    }
-    if ([string]::IsNullOrWhiteSpace([string]$manifest.capsuleId)) {
-        throw 'Manifest capsuleId is missing.'
-    }
+    $root = [System.IO.Path]::GetFullPath($CapsuleRoot).TrimEnd([char]'\', [char]'/')
+    $validatedManifest = Read-ICValidatedManifest -CapsuleRoot $root
+    $manifest = $validatedManifest.Manifest
+    $entries = @($validatedManifest.Entries)
 
     $fileResults = New-Object System.Collections.ArrayList
     $expected = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
-    $entries = @($manifest.files)
-
     foreach ($entry in $entries) {
-        $path = ConvertTo-ICValidatedRelativePath -RelativePath ([string]$entry.path)
-        if (-not $expected.Add($path)) {
-            throw "Manifest contains duplicate path '$path'."
-        }
-        if ([string]$entry.sha256 -notmatch '^[a-fA-F0-9]{64}$') {
-            throw "Manifest path '$path' contains an invalid SHA-256 value."
-        }
-
-        $expectedLength = [int64]$entry.length
-        if ($expectedLength -lt 0) {
-            throw "Manifest path '$path' contains a negative length."
-        }
-
-        $resolved = Resolve-ICContainedPath -BasePath $rootFull -RelativePath $path
-        $fullPath = $resolved.FullPath
-        if (-not (Test-Path -LiteralPath $fullPath -PathType Leaf)) {
+        [void]$expected.Add($entry.Path)
+        Assert-ICNoReparsePoint -RootPath $root -Path $entry.FullPath
+        if (-not (Test-Path -LiteralPath $entry.FullPath -PathType Leaf)) {
             [void]$fileResults.Add([pscustomobject][ordered]@{
-                Path           = $path
+                Path           = $entry.Path
                 Status         = 'Missing'
-                ExpectedSHA256 = ([string]$entry.sha256).ToLowerInvariant()
+                ExpectedSHA256 = $entry.ExpectedSHA256
                 ActualSHA256   = $null
-                ExpectedLength = $expectedLength
+                ExpectedLength = $entry.ExpectedLength
                 ActualLength   = $null
             })
             continue
         }
 
-        Assert-ICPathHasNoReparsePoint -BasePath $rootFull -FullPath $fullPath
-        $item = Get-Item -LiteralPath $fullPath -Force
-        $actualHash = (Get-FileHash -LiteralPath $fullPath -Algorithm SHA256).Hash.ToLowerInvariant()
-        $status = if (
-            $actualHash -eq ([string]$entry.sha256).ToLowerInvariant() -and
-            [int64]$item.Length -eq $expectedLength
-        ) { 'Valid' } else { 'Modified' }
+        $item = Get-Item -LiteralPath $entry.FullPath -Force -ErrorAction Stop
+        $actualHash = (Get-FileHash -LiteralPath $entry.FullPath -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant()
+        $status = if ($actualHash -eq $entry.ExpectedSHA256 -and [int64]$item.Length -eq $entry.ExpectedLength) { 'Valid' } else { 'Modified' }
 
         [void]$fileResults.Add([pscustomobject][ordered]@{
-            Path           = $path
+            Path           = $entry.Path
             Status         = $status
-            ExpectedSHA256 = ([string]$entry.sha256).ToLowerInvariant()
+            ExpectedSHA256 = $entry.ExpectedSHA256
             ActualSHA256   = $actualHash
-            ExpectedLength = $expectedLength
+            ExpectedLength = $entry.ExpectedLength
             ActualLength   = [int64]$item.Length
         })
     }
 
     $excluded = @('metadata/manifest.json', 'metadata/manifest.sha256')
-    foreach ($file in Get-ICSafeTreeFiles -RootPath $rootFull) {
-        $relative = Get-ICRelativePath -BasePath $rootFull -Path $file.FullName
+    foreach ($file in Get-ICSafeCapsuleFile -CapsuleRoot $root) {
+        $relative = Get-ICRelativePath -BasePath $root -Path $file.FullName
         if ($relative -in $excluded) {
             continue
         }
@@ -390,14 +548,14 @@ function Test-ICDirectoryIntegrity {
                 Path           = $relative
                 Status         = 'Unexpected'
                 ExpectedSHA256 = $null
-                ActualSHA256   = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+                ActualSHA256   = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant()
                 ExpectedLength = $null
                 ActualLength   = [int64]$file.Length
             })
         }
     }
 
-    $checksumListValid = Test-ICChecksumList -CapsuleRoot $rootFull -ManifestEntries $entries
+    $checksumListValid = Test-ICChecksumList -CapsuleRoot $root -ManifestEntries $entries
     $missing = @($fileResults | Where-Object Status -eq 'Missing').Count
     $modified = @($fileResults | Where-Object Status -eq 'Modified').Count
     $unexpected = @($fileResults | Where-Object Status -eq 'Unexpected').Count
@@ -405,7 +563,7 @@ function Test-ICDirectoryIntegrity {
 
     return [pscustomobject][ordered]@{
         PSTypeName        = 'IncidentCapsule.IntegrityResult'
-        Path              = $rootFull
+        Path              = $root
         SourceType        = 'Directory'
         CapsuleId         = [string]$manifest.capsuleId
         SchemaVersion     = [string]$manifest.schemaVersion
@@ -433,13 +591,162 @@ function Test-ICArchiveEntryType {
     $attributes = [System.BitConverter]::ToUInt32($attributeBytes, 0)
     $unixType = (($attributes -shr 16) -band 0xF000)
     $windowsAttributes = ($attributes -band 0xFFFF)
-
     if ($unixType -eq 0xA000 -or (($windowsAttributes -band [int][System.IO.FileAttributes]::ReparsePoint) -ne 0)) {
         throw "Archive entry '$($Entry.FullName)' represents a symbolic link or reparse point."
     }
 }
 
-function Expand-ICArchiveSafely {
+function Get-ICValidatedZipEntry {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [System.IO.Compression.ZipArchive]$Archive,
+
+        [Parameter(Mandatory)]
+        [string]$DestinationRoot,
+
+        [Parameter(Mandatory)]
+        [int]$MaximumArchiveEntries,
+
+        [Parameter(Mandatory)]
+        [int64]$MaximumArchiveEntryBytes,
+
+        [Parameter(Mandatory)]
+        [int64]$MaximumArchiveExpandedBytes,
+
+        [Parameter(Mandatory)]
+        [double]$MaximumArchiveCompressionRatio
+    )
+
+    if ($Archive.Entries.Count -gt $MaximumArchiveEntries) {
+        throw "Archive contains $($Archive.Entries.Count) entries; the limit is $MaximumArchiveEntries."
+    }
+
+    $validated = New-Object System.Collections.ArrayList
+    $entryTypes = New-Object 'System.Collections.Generic.Dictionary[string,string]' ([System.StringComparer]::OrdinalIgnoreCase)
+    [int64]$totalLength = 0
+    [int64]$totalCompressedLength = 0
+
+    foreach ($entry in $Archive.Entries) {
+        Test-ICArchiveEntryType -Entry $entry
+        $rawName = [string]$entry.FullName
+        if ([string]::IsNullOrWhiteSpace($rawName)) {
+            throw 'Archive contains an entry with an empty name.'
+        }
+
+        $isDirectory = $rawName.EndsWith('/') -or $rawName.EndsWith('\')
+        $pathForValidation = if ($isDirectory) { $rawName.TrimEnd([char]'/', [char]'\') } else { $rawName }
+        $safePath = Resolve-ICSafeRelativePath -RelativePath $pathForValidation -RootPath $DestinationRoot -Description 'Archive entry'
+
+        if ($entryTypes.ContainsKey($safePath.RelativePath)) {
+            throw "Archive contains duplicate or case-colliding entry '$($safePath.RelativePath)'."
+        }
+
+        $segments = @($safePath.Segments)
+        for ($index = 1; $index -lt $segments.Count; $index++) {
+            $ancestor = ($segments[0..($index - 1)] -join '/')
+            if ($entryTypes.ContainsKey($ancestor) -and $entryTypes[$ancestor] -eq 'File') {
+                throw "Archive entry '$($safePath.RelativePath)' is nested below file '$ancestor'."
+            }
+        }
+        if (-not $isDirectory) {
+            $descendantPrefix = $safePath.RelativePath + '/'
+            foreach ($knownPath in @($entryTypes.Keys)) {
+                if ($knownPath.StartsWith($descendantPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+                    throw "Archive file '$($safePath.RelativePath)' collides with child entry '$knownPath'."
+                }
+            }
+        }
+
+        if ($isDirectory -and ([int64]$entry.Length -ne 0 -or [int64]$entry.CompressedLength -ne 0)) {
+            throw "Archive directory entry '$($safePath.RelativePath)' contains data."
+        }
+        if (-not $isDirectory) {
+            if ([int64]$entry.Length -gt $MaximumArchiveEntryBytes) {
+                throw "Archive entry '$($safePath.RelativePath)' exceeds the $MaximumArchiveEntryBytes-byte per-entry size limit."
+            }
+            if ([int64]$entry.Length -gt $MaximumArchiveExpandedBytes - $totalLength) {
+                throw "Archive uncompressed size (expanded) exceeds the $MaximumArchiveExpandedBytes-byte limit."
+            }
+            $totalLength += [int64]$entry.Length
+            $totalCompressedLength += [int64]$entry.CompressedLength
+
+            $entryRatio = if ([int64]$entry.Length -eq 0) {
+                0.0
+            }
+            elseif ([int64]$entry.CompressedLength -eq 0) {
+                [double]::PositiveInfinity
+            }
+            else {
+                [double]$entry.Length / [double]$entry.CompressedLength
+            }
+            if ($entryRatio -gt $MaximumArchiveCompressionRatio) {
+                throw "Archive entry '$($safePath.RelativePath)' has compression ratio $([math]::Round($entryRatio, 2)); the limit is $MaximumArchiveCompressionRatio."
+            }
+        }
+
+        $entryTypes.Add($safePath.RelativePath, $(if ($isDirectory) { 'Directory' } else { 'File' }))
+        [void]$validated.Add([pscustomobject][ordered]@{
+            ZipEntry      = $entry
+            RelativePath = $safePath.RelativePath
+            FullPath     = $safePath.FullPath
+            Segments     = @($safePath.Segments)
+            IsDirectory  = $isDirectory
+            Length       = [int64]$entry.Length
+        })
+    }
+
+    $aggregateRatio = if ($totalLength -eq 0) {
+        0.0
+    }
+    elseif ($totalCompressedLength -eq 0) {
+        [double]::PositiveInfinity
+    }
+    else {
+        [double]$totalLength / [double]$totalCompressedLength
+    }
+    if ($aggregateRatio -gt $MaximumArchiveCompressionRatio) {
+        throw "Archive aggregate compression ratio $([math]::Round($aggregateRatio, 2)) exceeds the limit of $MaximumArchiveCompressionRatio."
+    }
+
+    return [pscustomobject][ordered]@{
+        Entries          = @($validated)
+        EntryCount       = $Archive.Entries.Count
+        ExpandedBytes    = $totalLength
+        UncompressedBytes = $totalLength
+        CompressionRatio = $aggregateRatio
+    }
+}
+
+function New-ICSafeExtractionDirectory {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$DestinationRoot,
+
+        [Parameter(Mandatory)]
+        [string[]]$Segments
+    )
+
+    $current = [System.IO.Path]::GetFullPath($DestinationRoot).TrimEnd([char]'\', [char]'/')
+    Assert-ICNoReparsePoint -RootPath $current -Path $current
+    foreach ($segment in $Segments) {
+        $current = Join-Path $current $segment
+        if (Test-Path -LiteralPath $current) {
+            if (-not (Test-Path -LiteralPath $current -PathType Container)) {
+                throw "Archive extraction path '$current' collides with a file."
+            }
+        }
+        else {
+            New-Item -ItemType Directory -Path $current -ErrorAction Stop | Out-Null
+        }
+        Assert-ICNoReparsePoint -RootPath $DestinationRoot -Path $current
+    }
+
+    return $current
+}
+
+function Expand-ICZipArchiveSafely {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -448,111 +755,111 @@ function Expand-ICArchiveSafely {
         [Parameter(Mandatory)]
         [string]$DestinationPath,
 
-        [Parameter(Mandatory)]
-        [int]$MaximumEntries,
+        [int]$MaximumArchiveEntries = 20000,
 
-        [Parameter(Mandatory)]
-        [int64]$MaximumEntryBytes,
+        [int64]$MaximumArchiveEntryBytes = 1073741824L,
 
-        [Parameter(Mandatory)]
-        [int64]$MaximumExpandedBytes,
+        [Alias('MaximumArchiveUncompressedBytes')]
+        [int64]$MaximumArchiveExpandedBytes = 21474836480L,
 
-        [Parameter(Mandatory)]
-        [int]$MaximumCompressionRatio
+        [double]$MaximumArchiveCompressionRatio = 250
     )
 
     Add-Type -AssemblyName System.IO.Compression -ErrorAction Stop
     Add-Type -AssemblyName System.IO.Compression.FileSystem -ErrorAction Stop
 
-    if (-not (Test-Path -LiteralPath $DestinationPath)) {
-        New-Item -ItemType Directory -Path $DestinationPath -Force | Out-Null
+    if (-not (Test-Path -LiteralPath $DestinationPath -PathType Container)) {
+        New-Item -ItemType Directory -Path $DestinationPath -Force -ErrorAction Stop | Out-Null
     }
+    Assert-ICNoReparsePoint -RootPath $DestinationPath -Path $DestinationPath
 
-    $archive = [System.IO.Compression.ZipFile]::OpenRead($ArchivePath)
-    $seen = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
-    $entryCount = 0
-    $expandedBytes = 0L
-
+    $stream = New-Object System.IO.FileStream(
+        $ArchivePath,
+        [System.IO.FileMode]::Open,
+        [System.IO.FileAccess]::Read,
+        [System.IO.FileShare]::Read
+    )
+    $archive = $null
     try {
-        foreach ($entry in $archive.Entries) {
-            $entryCount++
-            if ($entryCount -gt $MaximumEntries) {
-                throw "Archive contains more than the allowed $MaximumEntries entries."
-            }
+        $archive = New-Object System.IO.Compression.ZipArchive(
+            $stream,
+            [System.IO.Compression.ZipArchiveMode]::Read,
+            $false
+        )
+        $validation = Get-ICValidatedZipEntry `
+            -Archive $archive `
+            -DestinationRoot $DestinationPath `
+            -MaximumArchiveEntries $MaximumArchiveEntries `
+            -MaximumArchiveEntryBytes $MaximumArchiveEntryBytes `
+            -MaximumArchiveExpandedBytes $MaximumArchiveExpandedBytes `
+            -MaximumArchiveCompressionRatio $MaximumArchiveCompressionRatio
 
-            Test-ICArchiveEntryType -Entry $entry
-            $isDirectory = [string]::IsNullOrEmpty($entry.Name) -or $entry.FullName.EndsWith('/') -or $entry.FullName.EndsWith('\')
-            $resolved = Resolve-ICContainedPath -BasePath $DestinationPath -RelativePath ([string]$entry.FullName) -AllowDirectory:$isDirectory
-            if (-not $seen.Add($resolved.RelativePath)) {
-                throw "Archive contains duplicate path '$($resolved.RelativePath)'."
-            }
-
-            if ($isDirectory) {
-                New-Item -ItemType Directory -Path $resolved.FullPath -Force | Out-Null
+        [int64]$extractedBytes = 0
+        foreach ($entry in @($validation.Entries)) {
+            if ($entry.IsDirectory) {
+                [void](New-ICSafeExtractionDirectory -DestinationRoot $DestinationPath -Segments $entry.Segments)
                 continue
             }
 
-            if ([int64]$entry.Length -gt $MaximumEntryBytes) {
-                throw "Archive entry '$($entry.FullName)' exceeds the per-entry size limit."
+            $parentSegments = @()
+            if ($entry.Segments.Count -gt 1) {
+                $parentSegments = @($entry.Segments[0..($entry.Segments.Count - 2)])
             }
-
-            $expandedBytes += [int64]$entry.Length
-            if ($expandedBytes -gt $MaximumExpandedBytes) {
-                throw 'Archive exceeds the allowed expanded-size limit.'
+            if ($parentSegments.Count -gt 0) {
+                [void](New-ICSafeExtractionDirectory -DestinationRoot $DestinationPath -Segments $parentSegments)
             }
+            Assert-ICNoReparsePoint -RootPath $DestinationPath -Path ([System.IO.Path]::GetDirectoryName($entry.FullPath))
 
-            if ([int64]$entry.Length -gt 0) {
-                $compressedLength = [math]::Max([int64]$entry.CompressedLength, 1L)
-                $ratio = [double]$entry.Length / [double]$compressedLength
-                if ($ratio -gt [double]$MaximumCompressionRatio) {
-                    throw "Archive entry '$($entry.FullName)' exceeds the compression-ratio limit."
-                }
-            }
-
-            $parent = Split-Path -Parent $resolved.FullPath
-            if (-not (Test-Path -LiteralPath $parent)) {
-                New-Item -ItemType Directory -Path $parent -Force | Out-Null
-            }
-
-            $inputStream = $entry.Open()
-            $outputStream = New-Object -TypeName System.IO.FileStream -ArgumentList @(
-                $resolved.FullPath,
-                [System.IO.FileMode]::CreateNew,
-                [System.IO.FileAccess]::Write,
-                [System.IO.FileShare]::None
-            )
+            $inputStream = $null
+            $output = $null
+            [int64]$entryBytes = 0
             try {
-                $buffer = New-Object byte[] 81920
-                $written = 0L
+                $inputStream = $entry.ZipEntry.Open()
+                $output = New-Object System.IO.FileStream(
+                    $entry.FullPath,
+                    [System.IO.FileMode]::CreateNew,
+                    [System.IO.FileAccess]::Write,
+                    [System.IO.FileShare]::None
+                )
+                $buffer = New-Object byte[] 65536
                 while (($read = $inputStream.Read($buffer, 0, $buffer.Length)) -gt 0) {
-                    $written += $read
-                    if ($written -gt [int64]$entry.Length -or $written -gt $MaximumEntryBytes) {
-                        throw "Archive entry '$($entry.FullName)' expanded beyond its declared or allowed size."
+                    if (
+                        $entryBytes + $read -gt $entry.Length -or
+                        $entryBytes + $read -gt $MaximumArchiveEntryBytes -or
+                        $extractedBytes + $read -gt $MaximumArchiveExpandedBytes
+                    ) {
+                        throw "Archive entry '$($entry.RelativePath)' exceeded its validated extraction bound."
                     }
-                    $outputStream.Write($buffer, 0, $read)
+                    $output.Write($buffer, 0, $read)
+                    $entryBytes += $read
+                    $extractedBytes += $read
                 }
+                $output.Flush($true)
             }
             finally {
-                $outputStream.Dispose()
-                $inputStream.Dispose()
+                if ($null -ne $inputStream) { $inputStream.Dispose() }
+                if ($null -ne $output) { $output.Dispose() }
             }
 
-            if ((Get-Item -LiteralPath $resolved.FullPath -Force).Length -ne [int64]$entry.Length) {
-                throw "Archive entry '$($entry.FullName)' did not extract to its declared length."
+            if ($entryBytes -ne $entry.Length) {
+                throw "Archive entry '$($entry.RelativePath)' length changed during extraction."
             }
+        }
+
+        return [pscustomobject][ordered]@{
+            EntryCount                    = $validation.EntryCount
+            ExpandedBytes                 = $extractedBytes
+            UncompressedBytes             = $extractedBytes
+            CompressionRatio              = $validation.CompressionRatio
+            MaximumEntries                = $MaximumArchiveEntries
+            MaximumEntryBytes             = $MaximumArchiveEntryBytes
+            MaximumExpandedBytes          = $MaximumArchiveExpandedBytes
+            MaximumCompressionRatio       = $MaximumArchiveCompressionRatio
         }
     }
     finally {
-        $archive.Dispose()
-    }
-
-    return [pscustomobject][ordered]@{
-        EntryCount          = $entryCount
-        ExpandedBytes       = $expandedBytes
-        MaximumEntries      = $MaximumEntries
-        MaximumEntryBytes   = $MaximumEntryBytes
-        MaximumExpandedBytes = $MaximumExpandedBytes
-        MaximumCompressionRatio = $MaximumCompressionRatio
+        if ($null -ne $archive) { $archive.Dispose() }
+        else { $stream.Dispose() }
     }
 }
 
@@ -562,42 +869,50 @@ function Test-ICArchiveIntegrity {
         [Parameter(Mandatory)]
         [string]$ArchivePath,
 
+        [switch]$RequireSidecar,
+
         [int]$MaximumArchiveEntries = 20000,
 
         [int64]$MaximumArchiveEntryBytes = 1073741824L,
 
-        [int64]$MaximumArchiveExpandedBytes = 10737418240L,
+        [Alias('MaximumArchiveUncompressedBytes')]
+        [int64]$MaximumArchiveExpandedBytes = 21474836480L,
 
-        [int]$MaximumArchiveCompressionRatio = 250
+        [double]$MaximumArchiveCompressionRatio = 250
     )
 
     $resolvedArchive = (Resolve-Path -LiteralPath $ArchivePath -ErrorAction Stop).Path
     $archiveHashValid = $null
     $sidecarPath = "$resolvedArchive.sha256"
     if (Test-Path -LiteralPath $sidecarPath -PathType Leaf) {
-        $line = Get-Content -LiteralPath $sidecarPath -Encoding UTF8 | Select-Object -First 1
-        if ([string]$line -notmatch '^([a-fA-F0-9]{64})\s{2}(.+)$') {
-            throw "Sidecar '$sidecarPath' does not contain a valid SHA-256 record."
+        $line = [string](Get-Content -LiteralPath $sidecarPath -Encoding UTF8 -ErrorAction Stop | Select-Object -First 1)
+        if ($line -notmatch '^\s*([a-fA-F0-9]{64})(?:\s+(.+?))?\s*$') {
+            throw "Sidecar '$sidecarPath' does not contain a valid SHA-256 value."
         }
         $expectedHash = $Matches[1].ToLowerInvariant()
-        $expectedName = $Matches[2]
-        if ($expectedName -ne (Split-Path -Leaf $resolvedArchive)) {
-            throw "Sidecar '$sidecarPath' names '$expectedName' instead of the archive file."
+        if (-not [string]::IsNullOrWhiteSpace([string]$Matches[2])) {
+            $expectedName = ([string]$Matches[2]).Trim().TrimStart([char]'*')
+            if ($expectedName -ne (Split-Path -Leaf $resolvedArchive)) {
+                throw "Sidecar '$sidecarPath' names '$expectedName' instead of the selected archive."
+            }
         }
-        $actualHash = (Get-FileHash -LiteralPath $resolvedArchive -Algorithm SHA256).Hash.ToLowerInvariant()
+        $actualHash = (Get-FileHash -LiteralPath $resolvedArchive -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant()
         $archiveHashValid = $actualHash -eq $expectedHash
+    }
+    elseif ($RequireSidecar) {
+        throw "Required archive sidecar '$sidecarPath' was not found."
     }
 
     $temporaryRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("incident-capsule-verify-{0}" -f [guid]::NewGuid().ToString('N'))
-    New-Item -ItemType Directory -Path $temporaryRoot -Force | Out-Null
+    New-Item -ItemType Directory -Path $temporaryRoot -Force -ErrorAction Stop | Out-Null
     try {
-        $archivePolicy = Expand-ICArchiveSafely `
+        $archivePolicy = Expand-ICZipArchiveSafely `
             -ArchivePath $resolvedArchive `
             -DestinationPath $temporaryRoot `
-            -MaximumEntries $MaximumArchiveEntries `
-            -MaximumEntryBytes $MaximumArchiveEntryBytes `
-            -MaximumExpandedBytes $MaximumArchiveExpandedBytes `
-            -MaximumCompressionRatio $MaximumArchiveCompressionRatio
+            -MaximumArchiveEntries $MaximumArchiveEntries `
+            -MaximumArchiveEntryBytes $MaximumArchiveEntryBytes `
+            -MaximumArchiveExpandedBytes $MaximumArchiveExpandedBytes `
+            -MaximumArchiveCompressionRatio $MaximumArchiveCompressionRatio
 
         $root = Find-ICManifestRoot -Path $temporaryRoot
         $result = Test-ICDirectoryIntegrity -CapsuleRoot $root
@@ -605,6 +920,9 @@ function Test-ICArchiveIntegrity {
         $result.SourceType = 'Archive'
         $result.ArchiveHashValid = $archiveHashValid
         $result | Add-Member -NotePropertyName ArchivePolicy -NotePropertyValue $archivePolicy
+        $result | Add-Member -NotePropertyName ArchiveEntryCount -NotePropertyValue $archivePolicy.EntryCount
+        $result | Add-Member -NotePropertyName ArchiveUncompressedBytes -NotePropertyValue $archivePolicy.ExpandedBytes
+        $result | Add-Member -NotePropertyName ArchiveCompressionRatio -NotePropertyValue $archivePolicy.CompressionRatio
         if ($archiveHashValid -eq $false) {
             $result.IsValid = $false
         }
@@ -627,10 +945,10 @@ function Write-ICVerificationReceipt {
 
     $receiptPath = "$ArchivePath.verification.json"
     $receipt = [ordered]@{
-        '$schema'          = 'https://raw.githubusercontent.com/xGreeny/incident-capsule/v$($script:ICVersion)/docs/schemas/verification-receipt.schema.json'
+        '$schema'          = $script:ICVerificationReceiptSchema
         schemaVersion      = $script:ICSchemaVersion
         verifiedAtUtc      = [datetime]::UtcNow.ToString('o')
-        verifier = [ordered]@{
+        verifier           = [ordered]@{
             name    = $script:ICName
             version = $script:ICVersion
         }
@@ -638,7 +956,7 @@ function Write-ICVerificationReceipt {
         capsuleId          = $Verification.CapsuleId
         isValid            = [bool]$Verification.IsValid
         archiveHashValid   = $Verification.ArchiveHashValid
-        checksumListValid  = $Verification.ChecksumListValid
+        checksumListValid  = [bool]$Verification.ChecksumListValid
         filesExpected      = $Verification.FilesExpected
         filesValid         = $Verification.FilesValid
         filesMissing       = $Verification.FilesMissing

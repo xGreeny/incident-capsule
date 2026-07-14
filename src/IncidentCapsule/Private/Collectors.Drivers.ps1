@@ -35,8 +35,9 @@ function Get-ICDriverEvidence {
 
     if ($Context.Configuration.CollectSignedDrivers) {
         try {
-            $allSigned = @(Get-CimInstance -ClassName Win32_PnPSignedDriver -ErrorAction Stop)
-            $signedDrivers = @($allSigned | Select-Object -First $Context.Configuration.MaximumSignedDrivers | ForEach-Object {
+            $maximumSignedDrivers = [int]$Context.Configuration.MaximumSignedDrivers
+            $boundedSignedDrivers = @(Get-CimInstance -ClassName Win32_PnPSignedDriver -ErrorAction Stop | Select-Object -First ($maximumSignedDrivers + 1))
+            $signedDrivers = @($boundedSignedDrivers | Select-Object -First $maximumSignedDrivers | ForEach-Object {
                 [pscustomobject][ordered]@{
                     DeviceName = $_.DeviceName
                     DeviceID = $_.DeviceID
@@ -54,15 +55,15 @@ function Get-ICDriverEvidence {
                     HardWareID = $_.HardWareID
                 }
             })
-            if ($allSigned.Count -gt $signedDrivers.Count) {
-                Add-ICCollectorWarning -List $warnings -Message "Signed-driver export was bounded at $($signedDrivers.Count) of $($allSigned.Count) entries."
+            if ($boundedSignedDrivers.Count -gt $signedDrivers.Count) {
+                Add-ICCollectorWarning -List $warnings -Message "Signed-driver export reached the configured limit of $($signedDrivers.Count) entries; additional entries exist."
             }
         }
         catch { Add-ICCollectorWarning -List $warnings -Message "Signed PnP drivers: $($_.Exception.Message)" }
     }
     Add-ICOutputFiles -List $files -Path (Export-ICCollectorData -Context $Context -Collector Drivers -RelativePath 'evidence/drivers/signed-pnp-drivers.json' -Data $signedDrivers -Csv)
 
-    $driverQuery = Invoke-ICNativeCommand -FilePath (Get-ICSystemExecutable -Name 'driverquery.exe') -ArgumentList @('/v', '/fo', 'csv')
+    $driverQuery = Invoke-ICNativeCommand -FilePath (Get-ICSystemExecutable -Name 'driverquery.exe') -ArgumentList @('/v', '/fo', 'csv') -Context $Context
     $driverQueryPath = Join-Path $Context.RootPath 'evidence/drivers/driverquery.csv'
     [void](Write-ICUtf8File -Path $driverQueryPath -Content ((@($driverQuery.Output) -join [Environment]::NewLine) + [Environment]::NewLine))
     [void]$files.Add($driverQueryPath)
