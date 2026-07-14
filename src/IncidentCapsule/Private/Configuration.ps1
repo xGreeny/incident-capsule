@@ -40,6 +40,19 @@ function Get-ICDefaultEventLogs {
     }
 }
 
+function New-ICCommonConfiguration {
+    [CmdletBinding()]
+    param()
+
+    return [ordered]@{
+        SpreadsheetSafeCsv              = $true
+        MaximumArchiveEntries           = 20000
+        MaximumArchiveEntryBytes        = 1073741824L
+        MaximumArchiveExpandedBytes     = 10737418240L
+        MaximumArchiveCompressionRatio  = 250
+    }
+}
+
 function Get-ICDefaultConfiguration {
     [CmdletBinding()]
     param(
@@ -49,10 +62,11 @@ function Get-ICDefaultConfiguration {
     )
 
     $allCollectors = @($script:ICCollectorDefinitions.Keys)
+    $common = New-ICCommonConfiguration
 
-    switch ($Profile) {
+    $profileConfiguration = switch ($Profile) {
         'Minimal' {
-            return [ordered]@{
+            [ordered]@{
                 Collectors                   = @('System', 'Storage', 'Processes', 'Services', 'Network', 'Sessions', 'LocalAccounts', 'Defender', 'PowerShell', 'SecurityConfiguration', 'EventLogs')
                 EventLogs                    = @(Get-ICDefaultEventLogs -Profile Minimal)
                 EventLookbackHours           = 12
@@ -73,7 +87,7 @@ function Get-ICDefaultConfiguration {
             }
         }
         'Standard' {
-            return [ordered]@{
+            [ordered]@{
                 Collectors                   = $allCollectors
                 EventLogs                    = @(Get-ICDefaultEventLogs -Profile Standard)
                 EventLookbackHours           = 24
@@ -94,7 +108,7 @@ function Get-ICDefaultConfiguration {
             }
         }
         'Extended' {
-            return [ordered]@{
+            [ordered]@{
                 Collectors                   = $allCollectors
                 EventLogs                    = @(Get-ICDefaultEventLogs -Profile Extended)
                 EventLookbackHours           = 72
@@ -115,6 +129,12 @@ function Get-ICDefaultConfiguration {
             }
         }
     }
+
+    foreach ($key in $common.Keys) {
+        $profileConfiguration[$key] = $common[$key]
+    }
+
+    return $profileConfiguration
 }
 
 function Copy-ICValue {
@@ -182,6 +202,11 @@ function Test-ICConfiguration {
         throw "Unknown configuration key(s): $($unknown -join ', ')."
     }
 
+    $missing = @($script:ICConfigurationKeys | Where-Object { -not $Configuration.Contains($_) })
+    if ($missing.Count -gt 0) {
+        throw "Missing configuration key(s): $($missing -join ', ')."
+    }
+
     $unknownCollectors = @($Configuration.Collectors | Where-Object { $_ -notin $script:ICCollectorDefinitions.Keys })
     if ($unknownCollectors.Count -gt 0) {
         throw "Unknown collector name(s): $($unknownCollectors -join ', ')."
@@ -195,10 +220,7 @@ function Test-ICConfiguration {
         throw 'EventLogs cannot contain empty names.'
     }
 
-    foreach ($key in @(
-        'EventLookbackHours', 'MaximumEventsPerLog', 'MaximumExecutableHashes',
-        'MaximumWindowsUpdateHistory', 'MaximumSignedDrivers', 'MaximumFirewallRules'
-    )) {
+    foreach ($key in $script:ICConfigurationMaximums.Keys) {
         $value = $Configuration[$key]
         if ($value -isnot [int] -and $value -isnot [long]) {
             throw "Configuration key '$key' must be an integer."
@@ -206,12 +228,16 @@ function Test-ICConfiguration {
         if ([int64]$value -lt 1) {
             throw "Configuration key '$key' must be greater than zero."
         }
+        if ([int64]$value -gt [int64]$script:ICConfigurationMaximums[$key]) {
+            throw "Configuration key '$key' exceeds the supported maximum of $($script:ICConfigurationMaximums[$key])."
+        }
     }
 
     foreach ($key in @(
         'ExportEvtx', 'ExportScheduledTaskXml', 'IncludeProcessCommandLines',
         'HashProcessExecutables', 'HashPersistenceFiles', 'CollectWmiSubscriptions',
-        'CollectDefenderPreferences', 'CollectWindowsUpdateHistory', 'CollectSignedDrivers'
+        'CollectDefenderPreferences', 'CollectWindowsUpdateHistory', 'CollectSignedDrivers',
+        'SpreadsheetSafeCsv'
     )) {
         if ($Configuration[$key] -isnot [bool]) {
             throw "Configuration key '$key' must be Boolean."

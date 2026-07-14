@@ -24,7 +24,7 @@ Describe 'Incident Capsule collection smoke test' -Skip:(-not $isWindowsHost) {
         $verification.IsValid | Should -BeTrue
     }
 
-    It 'creates and verifies an archive with a sidecar checksum' {
+    It 'creates and independently verifies an archive and receipt' {
         $output = Join-Path $TestDrive 'archive-capsule'
         $result = Invoke-IncidentCapsule `
             -OutputPath $output `
@@ -36,10 +36,27 @@ Describe 'Incident Capsule collection smoke test' -Skip:(-not $isWindowsHost) {
         $result.IntegrityValid | Should -BeTrue
         $result.ArchivePath | Should -Exist
         $result.ArchiveChecksumPath | Should -Exist
+        $result.ArchiveVerificationPath | Should -Exist
 
         $verification = Test-IncidentCapsuleIntegrity -Path $result.ArchivePath
         $verification.IsValid | Should -BeTrue
         $verification.ArchiveHashValid | Should -BeTrue
         $verification.SourceType | Should -Be 'Archive'
+    }
+
+    It 'removes the working directory only after archive verification succeeds' {
+        $output = Join-Path $TestDrive 'cleanup-capsule'
+        $result = Invoke-IncidentCapsule `
+            -OutputPath $output `
+            -CaseId 'CI-CLEANUP' `
+            -Profile Minimal `
+            -Collectors Processes,Services `
+            -RemoveWorkingDirectory
+
+        $result.IntegrityValid | Should -BeTrue
+        $result.WorkingDirectory | Should -BeNullOrEmpty
+        $result.ReportPath | Should -BeNullOrEmpty
+        $result.ArchivePath | Should -Exist
+        $result.ArchiveVerificationPath | Should -Exist
     }
 }

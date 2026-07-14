@@ -35,8 +35,13 @@ ExcludeCollector removes names
 | `CollectSignedDrivers` | Boolean | Export signed PnP driver inventory |
 | `MaximumSignedDrivers` | positive integer | Upper bound for signed-driver rows |
 | `MaximumFirewallRules` | positive integer | Upper bound for exported firewall-rule metadata |
+| `SpreadsheetSafeCsv` | Boolean | Prefix potentially active spreadsheet formulas in derived CSV views; JSON remains unchanged |
+| `MaximumArchiveEntries` | positive integer | Maximum ZIP entries accepted during archive verification |
+| `MaximumArchiveEntryBytes` | positive integer | Maximum expanded size of one archive entry |
+| `MaximumArchiveExpandedBytes` | positive integer | Maximum total expanded archive size |
+| `MaximumArchiveCompressionRatio` | positive integer | Maximum expanded-to-compressed ratio accepted for one entry |
 
-Unknown settings are rejected. This prevents a misspelled option from silently changing collection expectations.
+Unknown settings are rejected. Numeric options are validated against both a positive lower bound and project-defined hard maximums. This prevents misspelled settings and intentionally extreme values from silently changing collection expectations.
 
 ## Curated Standard channels
 

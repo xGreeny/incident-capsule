@@ -28,7 +28,10 @@ sequenceDiagram
     Invoke->>Disk: capsule.json + offline report + final log entry
     Invoke->>Integrity: Freeze and hash files
     Integrity->>Disk: manifest.json + manifest.sha256
+    Integrity->>Disk: verify directory
     Integrity->>Disk: ZIP + sidecar checksum
+    Integrity->>Disk: safe extract + verify embedded manifest
+    Integrity->>Disk: external verification receipt
     Invoke-->>Operator: Result object
 ```
 
@@ -77,7 +80,7 @@ Structured JSON files use a common outer object:
 
 ```json
 {
-  "$schema": "https://raw.githubusercontent.com/xGreeny/incident-capsule/v1.0.0/docs/schemas/collector-envelope.schema.json",
+  "$schema": "https://raw.githubusercontent.com/xGreeny/incident-capsule/v1.0.1/docs/schemas/collector-envelope.schema.json",
   "schemaVersion": "1.0",
   "capsuleId": "IC-...",
   "collector": "Processes",
@@ -87,7 +90,7 @@ Structured JSON files use a common outer object:
 }
 ```
 
-The envelope keeps source attribution and capture time attached to exported data. CSV files intentionally contain the tabular data only; their corresponding JSON file retains the envelope.
+The envelope keeps source attribution and capture time attached to exported data. JSON is canonical. CSV files are derived spreadsheet-safe views and intentionally contain tabular data only; their corresponding JSON file retains the unchanged envelope.
 
 ## Configuration boundary
 
@@ -107,6 +110,9 @@ The acquisition root is mutable until capsule metadata, report, and collector lo
 - no collector or report file is modified;
 - every non-manifest file receives a SHA-256 entry;
 - the archive is built from the frozen root;
-- the archive hash is written outside the archive.
+- the archive hash is written outside the archive;
+- every ZIP entry is path- and budget-validated before extraction;
+- the newly created archive is independently verified before source cleanup;
+- an external verification receipt records the post-creation result.
 
 This protects against accidental modification and enables transfer verification. It does not provide authenticity against an attacker who can replace both evidence and checksums. See [Threat model](threat-model.md).

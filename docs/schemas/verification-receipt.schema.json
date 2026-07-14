@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/xGreeny/incident-capsule/v1.0.1/docs/schemas/verification-receipt.schema.json",
+  "title": "Incident Capsule archive verification receipt",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "verifiedAtUtc",
+    "verifier",
+    "archive",
+    "capsuleId",
+    "isValid",
+    "filesExpected",
+    "filesValid",
+    "filesMissing",
+    "filesModified",
+    "filesUnexpected"
+  ],
+  "properties": {
+    "$schema": { "type": "string" },
+    "schemaVersion": { "const": "1.0" },
+    "verifiedAtUtc": { "type": "string", "format": "date-time" },
+    "verifier": {
+      "type": "object",
+      "required": ["name", "version"],
+      "properties": {
+        "name": { "type": "string" },
+        "version": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "archive": { "type": "string" },
+    "capsuleId": { "type": "string" },
+    "isValid": { "type": "boolean" },
+    "archiveHashValid": { "type": ["boolean", "null"] },
+    "checksumListValid": { "type": "boolean" },
+    "filesExpected": { "type": "integer", "minimum": 0 },
+    "filesValid": { "type": "integer", "minimum": 0 },
+    "filesMissing": { "type": "integer", "minimum": 0 },
+    "filesModified": { "type": "integer", "minimum": 0 },
+    "filesUnexpected": { "type": "integer", "minimum": 0 },
+    "archivePolicy": { "type": ["object", "null"] }
+  },
+  "additionalProperties": false
+}

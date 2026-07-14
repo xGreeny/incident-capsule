@@ -99,7 +99,7 @@ function Get-ICEventLogEvidence {
                 Message = ([string]$_.Message -replace "`r?`n", ' ')
             }
         })
-        [void](Write-ICCsvFile -Path $csvPath -InputObject $csvRows)
+        [void](Write-ICCsvFile -Path $csvPath -InputObject $csvRows -SpreadsheetSafe ([bool]$Context.Configuration.SpreadsheetSafeCsv))
         [void]$files.Add($csvPath)
         $eventTotal += $events.Count
 

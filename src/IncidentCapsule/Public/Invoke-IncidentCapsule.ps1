@@ -6,13 +6,13 @@ function Invoke-IncidentCapsule {
     .DESCRIPTION
     Runs isolated read-only collectors, writes structured evidence and native artifacts,
     generates an offline HTML report, creates a SHA-256 manifest, and optionally creates
-    a ZIP archive with a sidecar checksum.
+    and verifies a ZIP archive with a sidecar checksum and external verification receipt.
 
     Collection is local only. Individual collectors can complete partially when a source
     is unavailable or the current token lacks access; those limitations are recorded.
 
     .PARAMETER OutputPath
-    Parent directory for the capsule directory, ZIP archive, and sidecar checksum.
+    Parent directory for the capsule directory, ZIP archive, sidecar checksum, and receipt.
 
     .PARAMETER CaseId
     External case or incident identifier stored in metadata and the folder name.
@@ -36,7 +36,8 @@ function Invoke-IncidentCapsule {
     Keep the evidence directory without creating a ZIP archive.
 
     .PARAMETER RemoveWorkingDirectory
-    Remove the evidence directory after the archive and sidecar checksum are created.
+    Remove the evidence directory only after the newly created archive has passed a full
+    archive hash, safe extraction, checksum-list, and embedded-manifest verification.
 
     .EXAMPLE
     $result = Invoke-IncidentCapsule -OutputPath 'C:\IR\Cases' -CaseId 'IR-2026-0042' -Profile Standard
@@ -94,9 +95,7 @@ function Invoke-IncidentCapsule {
         throw 'Operator cannot be empty.'
     }
 
-    $configurationParameters = @{
-        Profile = $Profile
-    }
+    $configurationParameters = @{ Profile = $Profile }
     if ($PSBoundParameters.ContainsKey('ConfigurationPath')) {
         $configurationParameters.ConfigurationPath = $ConfigurationPath
     }
@@ -154,16 +153,37 @@ function Invoke-IncidentCapsule {
     }
 
     $manifestResult = $null
+    $directoryVerification = $null
     $archiveResult = $null
+    $archiveVerification = $null
+    $verificationReceiptPath = $null
+
     try {
         $manifestResult = New-ICManifest -CapsuleRoot $context.RootPath -CapsuleId $context.CapsuleId
         $context.ManifestPath = $manifestResult.ManifestPath
         $context.ManifestTextPath = $manifestResult.TextPath
 
+        $directoryVerification = Test-ICDirectoryIntegrity -CapsuleRoot $context.RootPath
+        if (-not $directoryVerification.IsValid) {
+            throw 'The working directory failed post-collection integrity verification.'
+        }
+
         if (-not $NoCompression) {
             $archiveResult = New-ICArchive -CapsuleRoot $context.RootPath
             $context.ArchivePath = $archiveResult.ArchivePath
             $context.ArchiveHashPath = $archiveResult.SidecarPath
+
+            $archiveVerification = Test-ICArchiveIntegrity `
+                -ArchivePath $archiveResult.ArchivePath `
+                -MaximumArchiveEntries ([int]$configuration.MaximumArchiveEntries) `
+                -MaximumArchiveEntryBytes ([int64]$configuration.MaximumArchiveEntryBytes) `
+                -MaximumArchiveExpandedBytes ([int64]$configuration.MaximumArchiveExpandedBytes) `
+                -MaximumArchiveCompressionRatio ([int]$configuration.MaximumArchiveCompressionRatio)
+
+            $verificationReceiptPath = Write-ICVerificationReceipt -ArchivePath $archiveResult.ArchivePath -Verification $archiveVerification
+            if (-not $archiveVerification.IsValid) {
+                throw 'The newly created archive failed independent post-creation verification.'
+            }
         }
     }
     catch {
@@ -172,46 +192,42 @@ function Invoke-IncidentCapsule {
         $context.FatalError = "Integrity or archive finalization failed: $($_.Exception.Message)"
     }
 
-    $verification = $null
-    if ($null -ne $manifestResult) {
-        try {
-            $verification = Test-ICDirectoryIntegrity -CapsuleRoot $context.RootPath
-        }
-        catch {
-            if ($null -eq $fatalException) { $fatalException = $_ }
-            $context.Status = 'Failed'
-            $context.FatalError = "Post-collection integrity verification failed: $($_.Exception.Message)"
-        }
-    }
-
     $workingDirectory = $context.RootPath
     $reportPath = $context.ReportPath
-    if ($RemoveWorkingDirectory -and $null -ne $archiveResult -and $null -ne $verification -and $verification.IsValid) {
+    if (
+        $RemoveWorkingDirectory -and
+        $null -ne $archiveResult -and
+        $null -ne $archiveVerification -and
+        $archiveVerification.IsValid
+    ) {
         Remove-Item -LiteralPath $context.RootPath -Recurse -Force
         $workingDirectory = $null
         $reportPath = $null
     }
 
+    $finishedAt = [datetime]::UtcNow
+    $effectiveVerification = if ($null -ne $archiveVerification) { $archiveVerification } else { $directoryVerification }
     $result = [pscustomobject][ordered]@{
-        PSTypeName              = 'IncidentCapsule.Result'
-        CapsuleId              = $context.CapsuleId
-        CaseId                 = $context.CaseId
-        HostName               = $context.HostName
-        Profile                = $context.Profile
-        Status                 = $context.Status
-        IsElevated             = $context.IsElevated
-        StartedAtUtc           = $context.StartedAtUtc
-        CompletedAtUtc         = $context.CompletedAtUtc
-        DurationSeconds        = [math]::Round(($context.CompletedAtUtc - $context.StartedAtUtc).TotalSeconds, 3)
-        WorkingDirectory       = $workingDirectory
-        ReportPath             = $reportPath
-        ManifestPath           = if ($null -ne $workingDirectory) { $context.ManifestPath } else { $null }
-        ArchivePath            = $context.ArchivePath
-        ArchiveChecksumPath    = $context.ArchiveHashPath
-        ArchiveSHA256          = if ($null -ne $archiveResult) { $archiveResult.SHA256 } else { $null }
-        IntegrityValid         = if ($null -ne $verification) { $verification.IsValid } else { $false }
-        CollectorResults       = @($context.CollectorResults)
-        FatalError             = $context.FatalError
+        PSTypeName               = 'IncidentCapsule.Result'
+        CapsuleId               = $context.CapsuleId
+        CaseId                  = $context.CaseId
+        HostName                = $context.HostName
+        Profile                 = $context.Profile
+        Status                  = $context.Status
+        IsElevated              = $context.IsElevated
+        StartedAtUtc            = $context.StartedAtUtc
+        CompletedAtUtc          = $finishedAt
+        DurationSeconds         = [math]::Round(($finishedAt - $context.StartedAtUtc).TotalSeconds, 3)
+        WorkingDirectory        = $workingDirectory
+        ReportPath              = $reportPath
+        ManifestPath            = if ($null -ne $workingDirectory) { $context.ManifestPath } else { $null }
+        ArchivePath             = $context.ArchivePath
+        ArchiveChecksumPath     = $context.ArchiveHashPath
+        ArchiveVerificationPath = $verificationReceiptPath
+        ArchiveSHA256           = if ($null -ne $archiveResult) { $archiveResult.SHA256 } else { $null }
+        IntegrityValid          = if ($null -ne $effectiveVerification) { $effectiveVerification.IsValid } else { $false }
+        CollectorResults        = @($context.CollectorResults)
+        FatalError              = $context.FatalError
     }
 
     if ($null -ne $fatalException) {

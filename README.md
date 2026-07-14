@@ -52,9 +52,10 @@ IC_IR-2026-0042_WS-042_20260712T184233Z/
 
 IC_IR-2026-0042_WS-042_20260712T184233Z.zip
 IC_IR-2026-0042_WS-042_20260712T184233Z.zip.sha256
+IC_IR-2026-0042_WS-042_20260712T184233Z.zip.verification.json
 ```
 
-The report is self-contained and opens offline. JSON files use a common evidence envelope; large tabular datasets also receive CSV exports. Every file in the capsule is listed in a SHA-256 manifest. The ZIP receives a separate sidecar checksum.
+The report is self-contained and opens offline. JSON files use a common evidence envelope and remain the canonical structured evidence. Large tabular datasets can also receive spreadsheet-safe CSV views. Every file in the capsule is listed in a SHA-256 manifest. The ZIP receives a separate sidecar checksum and an external machine-readable verification receipt after safe extraction and embedded-manifest verification.
 
 ## Quick start
 
@@ -172,9 +173,11 @@ Incident Capsule separates acquisition from verification:
 4. every file except the manifest files themselves is hashed with SHA-256;
 5. `manifest.json` and `manifest.sha256` are written;
 6. the directory is archived;
-7. the archive receives a sidecar SHA-256 checksum.
+7. the archive receives a sidecar SHA-256 checksum;
+8. the archive is safely extracted and independently verified;
+9. a `.zip.verification.json` receipt is written beside the archive.
 
-`Test-IncidentCapsuleIntegrity` checks missing, modified, and unexpected files. For archives, it also validates the sidecar when present, extracts into a temporary directory, and verifies the embedded manifest.
+`Test-IncidentCapsuleIntegrity` checks missing, modified, and unexpected files and validates `manifest.sha256` against the JSON manifest. For archives, it validates the sidecar when present, rejects unsafe or duplicate paths, symbolic-link metadata, excessive entry counts, excessive expanded sizes, and suspicious compression ratios before extraction, then verifies the embedded manifest.
 
 ```powershell
 $verification = Test-IncidentCapsuleIntegrity -Path 'E:\Evidence\IC_IR-2026-0042_WS-042_20260712T184233Z.zip'
@@ -192,7 +195,7 @@ Incident Capsule is intentionally constrained:
 - no memory acquisition or full-disk imaging;
 - no browser-history or PowerShell-history content collection;
 - no active port scanning;
-- bounded event queries and bounded executable hashing;
+- bounded event queries, executable hashing, configuration values, and archive verification;
 - collector failures are recorded and do not erase successful evidence;
 - all reports work offline and load no external scripts, fonts, or telemetry.
 
@@ -241,15 +244,15 @@ More detail is available in [Architecture](docs/architecture.md) and [Threat mod
 ## Development and release validation
 
 ```powershell
-Install-Module Pester -MinimumVersion 5.5.0 -Scope CurrentUser
-Install-Module PSScriptAnalyzer -Scope CurrentUser
+Install-Module Pester -RequiredVersion 5.9.0 -Scope CurrentUser
+Install-Module PSScriptAnalyzer -RequiredVersion 1.25.0 -Scope CurrentUser
 
 ./build.ps1 -Task Analyze
 ./build.ps1 -Task Test
 ./build.ps1 -Task Package
 ```
 
-The CI workflow runs static analysis and Pester in both Windows PowerShell 5.1 and PowerShell 7. Tags matching `v*` produce a release ZIP and SHA-256 checksum.
+The CI workflow runs static analysis and Pester in both Windows PowerShell 5.1 and PowerShell 7. A version bump merged to `main` is validated, packaged, and published as an immutable GitHub release with a ZIP and SHA-256 checksum.
 
 ## Documentation
 
