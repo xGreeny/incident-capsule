@@ -129,14 +129,38 @@ function Write-ICUtf8File {
         [string]$Content
     )
 
-    $directory = Split-Path -Parent $Path
+    $fullPath = [System.IO.Path]::GetFullPath($Path)
+    $directory = Split-Path -Parent $fullPath
     if (-not (Test-Path -LiteralPath $directory)) {
         New-Item -ItemType Directory -Path $directory -Force | Out-Null
     }
 
+    $leafName = Split-Path -Leaf $fullPath
+    $temporaryPath = Join-Path $directory ('.{0}.{1}.tmp' -f $leafName, [guid]::NewGuid().ToString('N'))
     $encoding = New-Object System.Text.UTF8Encoding($false)
-    [System.IO.File]::WriteAllText($Path, $Content, $encoding)
-    return $Path
+
+    try {
+        [System.IO.File]::WriteAllText($temporaryPath, $Content, $encoding)
+
+        if (Test-Path -LiteralPath $fullPath -PathType Leaf) {
+            try {
+                [System.IO.File]::Replace($temporaryPath, $fullPath, $null)
+            }
+            catch {
+                Move-Item -LiteralPath $temporaryPath -Destination $fullPath -Force
+            }
+        }
+        else {
+            [System.IO.File]::Move($temporaryPath, $fullPath)
+        }
+    }
+    finally {
+        if (Test-Path -LiteralPath $temporaryPath) {
+            Remove-Item -LiteralPath $temporaryPath -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    return $fullPath
 }
 
 function Write-ICJsonFile {
@@ -156,6 +180,58 @@ function Write-ICJsonFile {
     return Write-ICUtf8File -Path $Path -Content ($json + [Environment]::NewLine)
 }
 
+function ConvertTo-ICSpreadsheetSafeValue {
+    [CmdletBinding()]
+    param(
+        [AllowNull()]
+        [object]$Value
+    )
+
+    if ($Value -isnot [string]) {
+        return $Value
+    }
+
+    $text = [string]$Value
+    if ($text -match '^[\x00-\x20]*[=+\-@]') {
+        return "'$text"
+    }
+
+    return $text
+}
+
+function ConvertTo-ICSpreadsheetSafeRows {
+    [CmdletBinding()]
+    param(
+        [AllowNull()]
+        [object[]]$InputObject
+    )
+
+    $rows = New-Object System.Collections.ArrayList
+    foreach ($item in @($InputObject)) {
+        if ($null -eq $item) {
+            [void]$rows.Add($null)
+            continue
+        }
+
+        $row = [ordered]@{}
+        foreach ($property in $item.PSObject.Properties) {
+            if ($property.MemberType -notin @('NoteProperty', 'Property', 'AliasProperty', 'ScriptProperty')) {
+                continue
+            }
+            $row[$property.Name] = ConvertTo-ICSpreadsheetSafeValue -Value $property.Value
+        }
+
+        if ($row.Count -eq 0) {
+            [void]$rows.Add((ConvertTo-ICSpreadsheetSafeValue -Value $item))
+        }
+        else {
+            [void]$rows.Add([pscustomobject]$row)
+        }
+    }
+
+    return @($rows)
+}
+
 function Write-ICCsvFile {
     [CmdletBinding()]
     param(
@@ -163,10 +239,16 @@ function Write-ICCsvFile {
         [string]$Path,
 
         [AllowNull()]
-        [object[]]$InputObject
+        [object[]]$InputObject,
+
+        [bool]$SpreadsheetSafe = $true
     )
 
     $items = @($InputObject)
+    if ($SpreadsheetSafe) {
+        $items = @(ConvertTo-ICSpreadsheetSafeRows -InputObject $items)
+    }
+
     $content = if ($items.Count -gt 0) {
         ($items | ConvertTo-Csv -NoTypeInformation) -join [Environment]::NewLine
     }
@@ -260,7 +342,11 @@ function Export-ICCollectorData {
 
     if ($Csv) {
         $csvPath = [System.IO.Path]::ChangeExtension($jsonPath, '.csv')
-        [void]$written.Add((Write-ICCsvFile -Path $csvPath -InputObject @($Data)))
+        $spreadsheetSafe = $true
+        if ($null -ne $Context.Configuration -and $Context.Configuration.Contains('SpreadsheetSafeCsv')) {
+            $spreadsheetSafe = [bool]$Context.Configuration.SpreadsheetSafeCsv
+        }
+        [void]$written.Add((Write-ICCsvFile -Path $csvPath -InputObject @($Data) -SpreadsheetSafe $spreadsheetSafe))
     }
 
     return @($written)

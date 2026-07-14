@@ -41,6 +41,13 @@ Describe 'Incident Capsule configuration' {
             { Test-ICConfiguration -Configuration $configuration } | Should -Throw '*greater than zero*'
         }
 
+
+        It 'rejects values above hard collection limits' {
+            $configuration = Get-ICDefaultConfiguration -Profile Minimal
+            $configuration.MaximumEventsPerLog = 100001
+            { Test-ICConfiguration -Configuration $configuration } | Should -Throw '*supported maximum*'
+        }
+
         It 'applies explicit collectors before exclusions' {
             $configuration = Resolve-ICConfiguration -Profile Standard -Collectors @('System', 'Processes', 'Network') -ExcludeCollector @('Network')
             $configuration.Collectors | Should -Be @('System', 'Processes')

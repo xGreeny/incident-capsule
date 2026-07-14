@@ -35,11 +35,15 @@ Each collector reports its own state, warnings, and outputs. Missing channels or
 
 ### Accidental modification after collection
 
-The embedded SHA-256 manifest identifies missing, changed, and unexpected files. The archive sidecar detects changes to the ZIP during storage or transfer.
+The embedded SHA-256 manifest identifies missing, changed, and unexpected files. The checksum list is cross-checked against the JSON manifest. The archive sidecar detects changes to the ZIP during storage or transfer, and an external receipt records safe extraction and embedded-manifest verification.
 
 ### Unbounded collection
 
-Profiles set explicit event windows, event limits, update-history limits, firewall-rule limits, and executable/driver hash limits. Configuration validation rejects invalid values.
+Profiles set explicit event windows, event limits, update-history limits, firewall-rule limits, executable/driver hash limits, and archive-verification budgets. Configuration validation rejects invalid and excessive values.
+
+### Unsafe archive extraction
+
+Archive entries are validated before extraction. Absolute paths, parent traversal, duplicate paths, alternate-data-stream separators, symbolic-link metadata, reparse points, excessive entry counts, excessive expanded sizes, and suspicious compression ratios are rejected.
 
 ### Unsafe remediation during evidence gathering
 

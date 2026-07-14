@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/xGreeny/incident-capsule/v1.0.0/docs/schemas/collector-envelope.schema.json",
+  "$id": "https://raw.githubusercontent.com/xGreeny/incident-capsule/v1.0.1/docs/schemas/collector-envelope.schema.json",
   "title": "Incident Capsule collector envelope",
   "type": "object",
   "required": [

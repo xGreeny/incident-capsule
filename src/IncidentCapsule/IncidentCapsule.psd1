@@ -1,11 +1,11 @@
 @{
     RootModule        = 'IncidentCapsule.psm1'
-    ModuleVersion     = '1.0.0'
+    ModuleVersion     = '1.0.1'
     GUID              = 'f4f29bb2-65a6-4e50-8548-4547f4d4f9e6'
     Author            = 'xGreeny'
     CompanyName       = 'Community'
     Copyright         = '(c) 2026 xGreeny and Incident Capsule contributors. MIT License.'
-    Description       = 'Read-only Windows first-response evidence collection with offline reporting and SHA-256 integrity verification.'
+    Description       = 'Read-only Windows first-response evidence collection with offline reporting and hardened SHA-256 integrity verification.'
     PowerShellVersion = '5.1'
     CompatiblePSEditions = @('Desktop', 'Core')
 
@@ -26,7 +26,7 @@
             )
             LicenseUri   = 'https://github.com/xGreeny/incident-capsule/blob/main/LICENSE'
             ProjectUri   = 'https://github.com/xGreeny/incident-capsule'
-            ReleaseNotes = 'Initial production release with 15 collectors, offline reporting, and integrity verification.'
+            ReleaseNotes = 'Integrity and lifecycle hardening with safe archive extraction, atomic writes, bounded verification, and archive verification receipts.'
         }
     }
 }

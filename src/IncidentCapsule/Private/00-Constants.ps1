@@ -1,9 +1,13 @@
+$moduleRoot = Split-Path $PSScriptRoot -Parent
+$moduleManifestPath = Join-Path $moduleRoot 'IncidentCapsule.psd1'
+$moduleManifestData = Import-PowerShellDataFile -LiteralPath $moduleManifestPath
+
 $script:ICName = 'Incident Capsule'
-$script:ICVersion = '1.0.0'
+$script:ICVersion = [string]$moduleManifestData.ModuleVersion
 $script:ICSchemaVersion = '1.0'
-$script:ICCollectorSchema = 'https://raw.githubusercontent.com/xGreeny/incident-capsule/v1.0.0/docs/schemas/collector-envelope.schema.json'
-$script:ICCapsuleSchema = 'https://raw.githubusercontent.com/xGreeny/incident-capsule/v1.0.0/docs/schemas/capsule.schema.json'
-$script:ICManifestSchema = 'https://raw.githubusercontent.com/xGreeny/incident-capsule/v1.0.0/docs/schemas/manifest.schema.json'
+$script:ICCollectorSchema = "https://raw.githubusercontent.com/xGreeny/incident-capsule/v$($script:ICVersion)/docs/schemas/collector-envelope.schema.json"
+$script:ICCapsuleSchema = "https://raw.githubusercontent.com/xGreeny/incident-capsule/v$($script:ICVersion)/docs/schemas/capsule.schema.json"
+$script:ICManifestSchema = "https://raw.githubusercontent.com/xGreeny/incident-capsule/v$($script:ICVersion)/docs/schemas/manifest.schema.json"
 
 $script:ICCollectorDefinitions = [ordered]@{
     System = [ordered]@{
@@ -85,5 +89,23 @@ $script:ICConfigurationKeys = @(
     'MaximumWindowsUpdateHistory',
     'CollectSignedDrivers',
     'MaximumSignedDrivers',
-    'MaximumFirewallRules'
+    'MaximumFirewallRules',
+    'SpreadsheetSafeCsv',
+    'MaximumArchiveEntries',
+    'MaximumArchiveEntryBytes',
+    'MaximumArchiveExpandedBytes',
+    'MaximumArchiveCompressionRatio'
 )
+
+$script:ICConfigurationMaximums = [ordered]@{
+    EventLookbackHours              = 720L
+    MaximumEventsPerLog             = 100000L
+    MaximumExecutableHashes         = 5000L
+    MaximumWindowsUpdateHistory     = 10000L
+    MaximumSignedDrivers            = 50000L
+    MaximumFirewallRules            = 50000L
+    MaximumArchiveEntries           = 50000L
+    MaximumArchiveEntryBytes        = 2147483648L
+    MaximumArchiveExpandedBytes     = 21474836480L
+    MaximumArchiveCompressionRatio  = 1000L
+}

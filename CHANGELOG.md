@@ -2,16 +2,34 @@
 
 All notable changes to Incident Capsule are documented in this file. The project follows [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [1.0.1] - 2026-07-14
+
+### Security
+
+- Reject absolute, traversing, duplicate, alternate-data-stream, and reparse-point paths during manifest and archive verification.
+- Inspect archive entry count, per-entry size, total expanded size, compression ratio, and symbolic-link metadata before extraction.
+- Verify generated archives before `-RemoveWorkingDirectory` can remove the working evidence directory.
+- Validate the conventional checksum list against the JSON manifest.
+
+### Added
+
+- External `.zip.verification.json` receipts for generated archives.
+- Configurable bounded archive-verification limits.
+- Spreadsheet-safe CSV exports while retaining JSON as canonical evidence.
+- Adversarial integrity and archive test coverage.
+
+### Changed
+
+- Structured files are written through same-directory temporary files and atomically committed where supported.
+- Runtime version and schema references are derived from the module manifest.
+- CI dependencies are pinned to Pester 5.9.0 and PSScriptAnalyzer 1.25.0.
+- Release packaging validates the packaged module before publication.
 
 ### Fixed
 
-- Pinned Pester 5.9.0 and PSScriptAnalyzer 1.25.0 for deterministic builds.
-- Explicitly import the required build-tool versions.
-- Upgraded GitHub checkout and artifact-upload actions to version 7.
-- Removed Dependabot label assumptions for repositories without custom labels.
-- Treat PSScriptAnalyzer parse errors as blocking build failures.
-- Added stricter release-asset and native-command validation.
+- Pester discovery under Windows PowerShell 5.1 and PowerShell 7.
+- Invalid matrix expressions in the GitHub Actions workflow.
+- Dependabot label assumptions for repositories without custom labels.
 
 ## [1.0.0] - 2026-07-12
 
@@ -29,4 +47,5 @@ All notable changes to Incident Capsule are documented in this file. The project
 - Pester tests, PSScriptAnalyzer integration, continuous integration, and tagged-release packaging.
 - Security, evidence-handling, architecture, configuration, and collector-reference documentation.
 
+[1.0.1]: https://github.com/xGreeny/incident-capsule/releases/tag/v1.0.1
 [1.0.0]: https://github.com/xGreeny/incident-capsule/releases/tag/v1.0.0

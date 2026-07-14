@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/xGreeny/incident-capsule/v1.0.0/docs/schemas/capsule.schema.json",
+  "$id": "https://raw.githubusercontent.com/xGreeny/incident-capsule/v1.0.1/docs/schemas/capsule.schema.json",
   "title": "Incident Capsule metadata",
   "type": "object",
   "required": [

@@ -30,5 +30,22 @@ Describe 'Incident Capsule IO helpers' {
             $bytes[0] | Should -Not -Be 0xEF
             [System.IO.File]::ReadAllText($path) | Should -Be 'capsule'
         }
+
+
+        It 'replaces an existing file without leaving a temporary artifact' {
+            $path = Join-Path $TestDrive 'atomic.txt'
+            Write-ICUtf8File -Path $path -Content 'first' | Out-Null
+            Write-ICUtf8File -Path $path -Content 'second' | Out-Null
+            [System.IO.File]::ReadAllText($path) | Should -Be 'second'
+            @(Get-ChildItem -LiteralPath $TestDrive -Filter '*.tmp' -Force).Count | Should -Be 0
+        }
+
+        It 'prefixes spreadsheet formula values in derived CSV output' {
+            $path = Join-Path $TestDrive 'safe.csv'
+            $rows = @([pscustomobject]@{ Name = '=2+2'; Safe = 'value' })
+            Write-ICCsvFile -Path $path -InputObject $rows -SpreadsheetSafe $true | Out-Null
+            $content = Get-Content -LiteralPath $path -Raw
+            $content | Should -Match "'=2\+2"
+        }
     }
 }
