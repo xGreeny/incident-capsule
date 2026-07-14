@@ -1,0 +1,67 @@
+name: Publish v1.0.1
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    if: github.head_ref == 'publish/v1.0.1'
+    runs-on: windows-latest
+    timeout-minutes: 35
+
+    steps:
+      - name: Check out release commit
+        uses: actions/checkout@v7
+        with:
+          ref: 7e3fb7be67c86cb50fe76dccda77f79b06a3823f
+          fetch-depth: 0
+
+      - name: Install build dependencies
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+          Install-Module Pester -RequiredVersion 5.9.0 -Scope CurrentUser -Force -SkipPublisherCheck -AllowClobber
+          Install-Module PSScriptAnalyzer -RequiredVersion 1.25.0 -Scope CurrentUser -Force -AllowClobber
+
+      - name: Validate and package
+        shell: pwsh
+        run: ./build.ps1 -Task All
+
+      - name: Publish GitHub release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tag = 'v1.0.1'
+
+          gh release view $tag *> $null
+          if ($LASTEXITCODE -eq 0) {
+              Write-Host "Release $tag already exists."
+              exit 0
+          }
+
+          $assets = @(
+              Get-ChildItem ./out/incident-capsule-1.0.1.zip, ./out/incident-capsule-1.0.1.zip.sha256 -File |
+              Sort-Object FullName |
+              Select-Object -ExpandProperty FullName
+          )
+          if ($assets.Count -ne 2) {
+              throw "Expected archive and checksum; found $($assets.Count) asset(s)."
+          }
+
+          gh release create $tag `
+              @assets `
+              --target 7e3fb7be67c86cb50fe76dccda77f79b06a3823f `
+              --title 'Incident Capsule v1.0.1' `
+              --notes-file ./release-notes/v1.0.1.md
+
+          if ($LASTEXITCODE -ne 0) {
+              throw "Release creation failed with exit code $LASTEXITCODE."
+          }
