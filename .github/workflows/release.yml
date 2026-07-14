@@ -2,8 +2,9 @@ name: Release
 
 on:
   push:
-    tags:
-      - 'v*'
+    branches:
+      - main
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -18,9 +19,9 @@ concurrency:
 
 jobs:
   release:
-    name: Validate, package and release
+    name: Validate, package and publish version
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 35
 
     steps:
       - name: Check out repository
@@ -28,14 +29,36 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Resolve release version
+        id: version
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $manifest = Test-ModuleManifest `
+            -Path ./src/IncidentCapsule/IncidentCapsule.psd1 `
+            -ErrorAction Stop
+
+          $tag = "v$($manifest.Version)"
+          "tag=$tag" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+          gh release view $tag *> $null
+          if ($LASTEXITCODE -eq 0) {
+              "publish=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+              Write-Host "Release $tag already exists; no mutable replacement will be published."
+          }
+          else {
+              "publish=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+              Write-Host "Release $tag will be validated and published from $env:GITHUB_SHA."
+          }
+
       - name: Install build dependencies
+        if: steps.version.outputs.publish == 'true'
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-
-          Set-PSRepository `
-            -Name PSGallery `
-            -InstallationPolicy Trusted
+          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
 
           Install-Module `
             -Name Pester `
@@ -52,80 +75,34 @@ jobs:
             -Force `
             -AllowClobber
 
-          Import-Module `
-            -Name Pester `
-            -RequiredVersion $env:PESTER_VERSION `
-            -Force `
-            -ErrorAction Stop
-
-          Import-Module `
-            -Name PSScriptAnalyzer `
-            -RequiredVersion $env:PSSCRIPTANALYZER_VERSION `
-            -Force `
-            -ErrorAction Stop
-
-          Write-Host "Pester version: $((Get-Module Pester).Version)"
-          Write-Host "PSScriptAnalyzer version: $((Get-Module PSScriptAnalyzer).Version)"
-
       - name: Validate and package
+        if: steps.version.outputs.publish == 'true'
         shell: pwsh
         run: ./build.ps1 -Task All
 
-      - name: Verify tag matches module version
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-
-          $manifest = Test-ModuleManifest `
-            -Path ./src/IncidentCapsule/IncidentCapsule.psd1 `
-            -ErrorAction Stop
-
-          $expectedTag = "v$($manifest.Version)"
-
-          if ($env:GITHUB_REF_NAME -ne $expectedTag) {
-              throw "Tag '$env:GITHUB_REF_NAME' does not match module version '$expectedTag'."
-          }
-
-          Write-Host "Release tag matches module version: $expectedTag"
-
       - name: Validate release assets
+        if: steps.version.outputs.publish == 'true'
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-
-          $archives = @(
-              Get-ChildItem `
-                -Path ./out/incident-capsule-*.zip `
-                -File `
-                -ErrorAction Stop
-          )
-
-          $checksums = @(
-              Get-ChildItem `
-                -Path ./out/incident-capsule-*.zip.sha256 `
-                -File `
-                -ErrorAction Stop
-          )
+          $archives = @(Get-ChildItem -Path ./out/incident-capsule-*.zip -File -ErrorAction Stop)
+          $checksums = @(Get-ChildItem -Path ./out/incident-capsule-*.zip.sha256 -File -ErrorAction Stop)
 
           if ($archives.Count -ne 1) {
               throw "Expected exactly one release archive, found $($archives.Count)."
           }
-
           if ($checksums.Count -ne 1) {
               throw "Expected exactly one checksum file, found $($checksums.Count)."
           }
 
-          Write-Host "Archive: $($archives[0].Name)"
-          Write-Host "Checksum: $($checksums[0].Name)"
-
-      - name: Create or update GitHub release
+      - name: Publish immutable GitHub release
+        if: steps.version.outputs.publish == 'true'
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
         run: |
           $ErrorActionPreference = 'Stop'
-
-          $tag = $env:GITHUB_REF_NAME
           $assetPaths = @(
               Get-ChildItem `
                 -Path ./out/incident-capsule-*.zip, ./out/incident-capsule-*.zip.sha256 `
@@ -134,19 +111,21 @@ jobs:
               Select-Object -ExpandProperty FullName
           )
 
-          gh release view $tag 2>$null
-
-          if ($LASTEXITCODE -eq 0) {
-              gh release upload $tag @assetPaths --clobber
+          $notesPath = Join-Path './release-notes' "$env:RELEASE_TAG.md"
+          $arguments = @(
+              'release', 'create', $env:RELEASE_TAG,
+              '--target', $env:GITHUB_SHA,
+              '--title', "Incident Capsule $env:RELEASE_TAG"
+          )
+          if (Test-Path -LiteralPath $notesPath -PathType Leaf) {
+              $arguments += @('--notes-file', $notesPath)
           }
           else {
-              gh release create `
-                $tag `
-                @assetPaths `
-                --generate-notes `
-                --title $tag
+              $arguments += '--generate-notes'
           }
+          $arguments += $assetPaths
 
+          & gh @arguments
           if ($LASTEXITCODE -ne 0) {
-              throw "GitHub release command failed with exit code $LASTEXITCODE."
+              throw "GitHub release creation failed with exit code $LASTEXITCODE."
           }
