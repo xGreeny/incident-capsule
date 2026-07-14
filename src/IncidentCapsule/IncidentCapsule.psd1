@@ -1,6 +1,6 @@
 @{
     RootModule        = 'IncidentCapsule.psm1'
-    ModuleVersion     = '1.0.1'
+    ModuleVersion     = '1.1.0'
     GUID              = 'f4f29bb2-65a6-4e50-8548-4547f4d4f9e6'
     Author            = 'xGreeny'
     CompanyName       = 'Community'
@@ -12,6 +12,7 @@
     FunctionsToExport = @(
         'Get-IncidentCapsuleProfile',
         'Invoke-IncidentCapsule',
+        'Test-IncidentCapsuleReadiness',
         'Test-IncidentCapsuleIntegrity'
     )
     CmdletsToExport   = @()
@@ -26,7 +27,7 @@
             )
             LicenseUri   = 'https://github.com/xGreeny/incident-capsule/blob/main/LICENSE'
             ProjectUri   = 'https://github.com/xGreeny/incident-capsule'
-            ReleaseNotes = 'Integrity and lifecycle hardening with safe archive extraction, atomic writes, bounded verification, and archive verification receipts.'
+            ReleaseNotes = 'Trustworthy finalization and safe handoff: readiness checks, bounded collection, structured coverage, derived timeline, hardened checksum and archive verification with receipts, and self-contained release packages.'
         }
     }
 }

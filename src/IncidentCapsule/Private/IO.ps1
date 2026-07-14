@@ -130,33 +130,50 @@ function Write-ICUtf8File {
     )
 
     $fullPath = [System.IO.Path]::GetFullPath($Path)
-    $directory = Split-Path -Parent $fullPath
+    $directory = [System.IO.Path]::GetDirectoryName($fullPath)
     if (-not (Test-Path -LiteralPath $directory)) {
         New-Item -ItemType Directory -Path $directory -Force | Out-Null
     }
 
-    $leafName = Split-Path -Leaf $fullPath
-    $temporaryPath = Join-Path $directory ('.{0}.{1}.tmp' -f $leafName, [guid]::NewGuid().ToString('N'))
     $encoding = New-Object System.Text.UTF8Encoding($false)
-
+    $temporaryPath = Join-Path $directory ('.{0}.{1}.partial' -f [System.IO.Path]::GetFileName($fullPath), [guid]::NewGuid().ToString('N'))
+    $backupPath = Join-Path $directory ('.{0}.{1}.backup' -f [System.IO.Path]::GetFileName($fullPath), [guid]::NewGuid().ToString('N'))
+    $stream = $null
     try {
-        [System.IO.File]::WriteAllText($temporaryPath, $Content, $encoding)
+        $bytes = $encoding.GetBytes($Content)
+        $stream = New-Object System.IO.FileStream(
+            $temporaryPath,
+            [System.IO.FileMode]::CreateNew,
+            [System.IO.FileAccess]::Write,
+            [System.IO.FileShare]::None
+        )
+        $stream.Write($bytes, 0, $bytes.Length)
+        $stream.Flush($true)
+        $stream.Dispose()
+        $stream = $null
 
-        if (Test-Path -LiteralPath $fullPath -PathType Leaf) {
-            try {
-                [System.IO.File]::Replace($temporaryPath, $fullPath, $null)
-            }
-            catch {
-                Move-Item -LiteralPath $temporaryPath -Destination $fullPath -Force
-            }
+        if ([System.IO.File]::Exists($fullPath)) {
+            [System.IO.File]::Replace($temporaryPath, $fullPath, $backupPath)
+            [System.IO.File]::Delete($backupPath)
         }
         else {
             [System.IO.File]::Move($temporaryPath, $fullPath)
         }
     }
     finally {
-        if (Test-Path -LiteralPath $temporaryPath) {
-            Remove-Item -LiteralPath $temporaryPath -Force -ErrorAction SilentlyContinue
+        if ($null -ne $stream) {
+            $stream.Dispose()
+        }
+        if ([System.IO.File]::Exists($temporaryPath)) {
+            [System.IO.File]::Delete($temporaryPath)
+        }
+        if ([System.IO.File]::Exists($backupPath)) {
+            if ([System.IO.File]::Exists($fullPath)) {
+                [System.IO.File]::Delete($backupPath)
+            }
+            else {
+                [System.IO.File]::Move($backupPath, $fullPath)
+            }
         }
     }
 
@@ -199,11 +216,13 @@ function ConvertTo-ICSpreadsheetSafeValue {
     return $text
 }
 
-function ConvertTo-ICSpreadsheetSafeRows {
+function ConvertTo-ICSpreadsheetSafeRow {
     [CmdletBinding()]
     param(
         [AllowNull()]
-        [object[]]$InputObject
+        [object[]]$InputObject,
+
+        [bool]$SpreadsheetSafe = $true
     )
 
     $rows = New-Object System.Collections.ArrayList
@@ -214,15 +233,24 @@ function ConvertTo-ICSpreadsheetSafeRows {
         }
 
         $row = [ordered]@{}
-        foreach ($property in $item.PSObject.Properties) {
-            if ($property.MemberType -notin @('NoteProperty', 'Property', 'AliasProperty', 'ScriptProperty')) {
-                continue
+        if ($item -is [System.Collections.IDictionary]) {
+            foreach ($key in $item.Keys) {
+                $value = $item[$key]
+                $row[[string]$key] = if ($SpreadsheetSafe) { ConvertTo-ICSpreadsheetSafeValue -Value $value } else { $value }
             }
-            $row[$property.Name] = ConvertTo-ICSpreadsheetSafeValue -Value $property.Value
+        }
+        else {
+            foreach ($property in $item.PSObject.Properties) {
+                if (-not $property.IsGettable -or $property.MemberType -notin @('NoteProperty', 'Property', 'AliasProperty', 'ScriptProperty')) {
+                    continue
+                }
+                $row[$property.Name] = if ($SpreadsheetSafe) { ConvertTo-ICSpreadsheetSafeValue -Value $property.Value } else { $property.Value }
+            }
         }
 
         if ($row.Count -eq 0) {
-            [void]$rows.Add((ConvertTo-ICSpreadsheetSafeValue -Value $item))
+            $value = if ($SpreadsheetSafe) { ConvertTo-ICSpreadsheetSafeValue -Value $item } else { $item }
+            [void]$rows.Add($value)
         }
         else {
             [void]$rows.Add([pscustomobject]$row)
@@ -244,11 +272,7 @@ function Write-ICCsvFile {
         [bool]$SpreadsheetSafe = $true
     )
 
-    $items = @($InputObject)
-    if ($SpreadsheetSafe) {
-        $items = @(ConvertTo-ICSpreadsheetSafeRows -InputObject $items)
-    }
-
+    $items = @(ConvertTo-ICSpreadsheetSafeRow -InputObject @($InputObject) -SpreadsheetSafe $SpreadsheetSafe)
     $content = if ($items.Count -gt 0) {
         ($items | ConvertTo-Csv -NoTypeInformation) -join [Environment]::NewLine
     }
@@ -368,30 +392,270 @@ function Invoke-ICNativeCommand {
         [Parameter(Mandatory)]
         [string]$FilePath,
 
-        [string[]]$ArgumentList = @()
+        [string[]]$ArgumentList = @(),
+
+        [AllowNull()]
+        [object]$Context,
+
+        [ValidateRange(0, 86400)]
+        [int]$TimeoutSeconds = 0,
+
+        [ValidateRange(0, 2147483647)]
+        [int64]$MaximumOutputBytes = 0
     )
+
+    if ($TimeoutSeconds -eq 0) {
+        $configuration = Get-ICPropertyValue -InputObject $Context -Name 'Configuration'
+        $TimeoutSeconds = [int](Get-ICPropertyValue -InputObject $configuration -Name 'NativeCommandTimeoutSeconds' -Default 120)
+    }
+    if ($MaximumOutputBytes -eq 0) {
+        $configuration = Get-ICPropertyValue -InputObject $Context -Name 'Configuration'
+        $MaximumOutputBytes = [int64](Get-ICPropertyValue -InputObject $configuration -Name 'MaximumNativeOutputBytes' -Default 16777216)
+    }
+    if ($TimeoutSeconds -lt 1 -or $TimeoutSeconds -gt 86400) {
+        throw 'Native command timeout must be between 1 and 86400 seconds.'
+    }
+    if ($MaximumOutputBytes -lt 1 -or $MaximumOutputBytes -gt 2147483647) {
+        throw 'Native command output limit must be between 1 and 2147483647 bytes.'
+    }
 
     $output = @()
     $exitCode = $null
+    $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
     try {
-        $output = @(& $FilePath @ArgumentList 2>&1 | ForEach-Object { $_.ToString() })
-        $exitCode = $LASTEXITCODE
+        if ($null -eq ('IncidentCapsule.Runtime.NativeCommandRunner' -as [type])) {
+            Add-Type -TypeDefinition @'
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
+using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace IncidentCapsule.Runtime
+{
+    public sealed class NativeCommandCapture
+    {
+        public int? ExitCode { get; set; }
+        public string StandardOutput { get; set; }
+        public string StandardError { get; set; }
+        public bool TimedOut { get; set; }
+        public bool OutputTruncated { get; set; }
+        public long OutputBytes { get; set; }
+    }
+
+    internal sealed class BoundedCaptureState
+    {
+        private readonly object sync = new object();
+        private readonly long maximumBytes;
+        private long capturedBytes;
+
+        internal readonly Process Process;
+        internal bool LimitExceeded;
+
+        internal BoundedCaptureState(Process process, long maximumBytes)
+        {
+            Process = process;
+            this.maximumBytes = maximumBytes;
+        }
+
+        internal long CapturedBytes { get { lock (sync) { return capturedBytes; } } }
+
+        internal void Copy(Stream source, MemoryStream destination)
+        {
+            byte[] buffer = new byte[8192];
+            try
+            {
+                int read;
+                while ((read = source.Read(buffer, 0, buffer.Length)) > 0)
+                {
+                    int accepted;
+                    bool terminate = false;
+                    lock (sync)
+                    {
+                        long remaining = maximumBytes - capturedBytes;
+                        accepted = remaining <= 0 ? 0 : (int)Math.Min((long)read, remaining);
+                        capturedBytes += accepted;
+                        if (accepted < read)
+                        {
+                            LimitExceeded = true;
+                            terminate = true;
+                        }
+                    }
+
+                    if (accepted > 0)
+                    {
+                        destination.Write(buffer, 0, accepted);
+                    }
+                    if (terminate)
+                    {
+                        try { Process.Kill(); } catch { }
+                        break;
+                    }
+                }
+            }
+            catch (IOException) { }
+            catch (ObjectDisposedException) { }
+        }
+    }
+
+    public static class NativeCommandRunner
+    {
+        private static string QuoteArgument(string value)
+        {
+            if (value == null) { return "\"\""; }
+            if (value.Length > 0 && value.IndexOfAny(new[] { ' ', '\t', '\n', '\v', '"' }) < 0)
+            {
+                return value;
+            }
+
+            StringBuilder builder = new StringBuilder();
+            builder.Append('"');
+            int backslashes = 0;
+            foreach (char character in value)
+            {
+                if (character == '\\')
+                {
+                    backslashes++;
+                    continue;
+                }
+                if (character == '"')
+                {
+                    builder.Append('\\', backslashes * 2 + 1);
+                    builder.Append('"');
+                    backslashes = 0;
+                    continue;
+                }
+                builder.Append('\\', backslashes);
+                backslashes = 0;
+                builder.Append(character);
+            }
+            builder.Append('\\', backslashes * 2);
+            builder.Append('"');
+            return builder.ToString();
+        }
+
+        public static NativeCommandCapture Run(string filePath, string[] arguments, int timeoutSeconds, long maximumOutputBytes)
+        {
+            List<string> quoted = new List<string>();
+            if (arguments != null)
+            {
+                foreach (string argument in arguments) { quoted.Add(QuoteArgument(argument)); }
+            }
+
+            ProcessStartInfo info = new ProcessStartInfo();
+            info.FileName = filePath;
+            info.Arguments = string.Join(" ", quoted.ToArray());
+            info.UseShellExecute = false;
+            info.CreateNoWindow = true;
+            info.RedirectStandardOutput = true;
+            info.RedirectStandardError = true;
+
+            using (Process process = new Process())
+            using (MemoryStream standardOutput = new MemoryStream())
+            using (MemoryStream standardError = new MemoryStream())
+            {
+                process.StartInfo = info;
+                if (!process.Start()) { throw new InvalidOperationException("Native process did not start."); }
+
+                Encoding outputEncoding = process.StandardOutput.CurrentEncoding;
+                Encoding errorEncoding = process.StandardError.CurrentEncoding;
+                BoundedCaptureState state = new BoundedCaptureState(process, maximumOutputBytes);
+                Task outputTask = Task.Factory.StartNew(
+                    () => state.Copy(process.StandardOutput.BaseStream, standardOutput),
+                    CancellationToken.None,
+                    TaskCreationOptions.LongRunning,
+                    TaskScheduler.Default);
+                Task errorTask = Task.Factory.StartNew(
+                    () => state.Copy(process.StandardError.BaseStream, standardError),
+                    CancellationToken.None,
+                    TaskCreationOptions.LongRunning,
+                    TaskScheduler.Default);
+
+                bool exited = process.WaitForExit(checked(timeoutSeconds * 1000));
+                bool timedOut = !exited;
+                if (timedOut)
+                {
+                    try { process.Kill(); } catch { }
+                }
+
+                try
+                {
+                    if (!timedOut) { process.WaitForExit(); }
+                    else { process.WaitForExit(5000); }
+                }
+                catch { }
+                try { Task.WaitAll(new[] { outputTask, errorTask }, 5000); } catch { }
+
+                int? exitCode = null;
+                try { if (process.HasExited) { exitCode = process.ExitCode; } } catch { }
+
+                return new NativeCommandCapture
+                {
+                    ExitCode = exitCode,
+                    StandardOutput = outputEncoding.GetString(standardOutput.ToArray()),
+                    StandardError = errorEncoding.GetString(standardError.ToArray()),
+                    TimedOut = timedOut,
+                    OutputTruncated = state.LimitExceeded,
+                    OutputBytes = state.CapturedBytes
+                };
+            }
+        }
+    }
+}
+'@ -ErrorAction Stop
+        }
+
+        $capture = [IncidentCapsule.Runtime.NativeCommandRunner]::Run(
+            $FilePath,
+            @($ArgumentList),
+            $TimeoutSeconds,
+            $MaximumOutputBytes
+        )
+        $exitCode = $capture.ExitCode
+        $capturedStreams = @($capture.StandardOutput; $capture.StandardError) |
+            Where-Object { -not [string]::IsNullOrEmpty($_) }
+        $combined = $capturedStreams -join [Environment]::NewLine
+        if (-not [string]::IsNullOrEmpty($combined)) {
+            $output = @([regex]::Split($combined.TrimEnd("`r", "`n"), '\r\n|\n|\r'))
+        }
+
+        $errorMessage = $null
+        if ($capture.TimedOut) {
+            $errorMessage = "Native command timed out after $TimeoutSeconds second(s)."
+        }
+        elseif ($capture.OutputTruncated) {
+            $errorMessage = "Native command exceeded the $MaximumOutputBytes-byte output limit and was terminated."
+        }
+
         return [pscustomobject][ordered]@{
-            FilePath  = $FilePath
-            Arguments = @($ArgumentList)
-            ExitCode  = $exitCode
-            Output    = $output
-            Error     = $null
+            FilePath            = $FilePath
+            Arguments           = @($ArgumentList)
+            ExitCode            = $exitCode
+            Output              = $output
+            Error               = $errorMessage
+            TimedOut            = [bool]$capture.TimedOut
+            OutputTruncated     = [bool]$capture.OutputTruncated
+            OutputBytes         = [int64]$capture.OutputBytes
+            DurationMilliseconds = [math]::Round($stopwatch.Elapsed.TotalMilliseconds, 0)
         }
     }
     catch {
         return [pscustomobject][ordered]@{
-            FilePath  = $FilePath
-            Arguments = @($ArgumentList)
-            ExitCode  = $exitCode
-            Output    = $output
-            Error     = $_.Exception.Message
+            FilePath            = $FilePath
+            Arguments           = @($ArgumentList)
+            ExitCode            = $exitCode
+            Output              = $output
+            Error               = $_.Exception.Message
+            TimedOut            = $false
+            OutputTruncated     = $false
+            OutputBytes         = 0
+            DurationMilliseconds = [math]::Round($stopwatch.Elapsed.TotalMilliseconds, 0)
         }
+    }
+    finally {
+        $stopwatch.Stop()
     }
 }
 
@@ -410,11 +674,14 @@ function Export-ICNativeCommandOutput {
         [string[]]$ArgumentList = @()
     )
 
-    $result = Invoke-ICNativeCommand -FilePath $FilePath -ArgumentList $ArgumentList
+    $result = Invoke-ICNativeCommand -FilePath $FilePath -ArgumentList $ArgumentList -Context $Context
     $lines = New-Object System.Collections.Generic.List[string]
     $lines.Add("# capturedAtUtc: $([datetime]::UtcNow.ToString('o'))")
     $lines.Add("# command: $FilePath $($ArgumentList -join ' ')")
     $lines.Add("# exitCode: $($result.ExitCode)")
+    $lines.Add("# timedOut: $($result.TimedOut)")
+    $lines.Add("# outputTruncated: $($result.OutputTruncated)")
+    $lines.Add("# outputBytes: $($result.OutputBytes)")
     if ($null -ne $result.Error) {
         $lines.Add("# error: $($result.Error)")
     }
@@ -427,9 +694,12 @@ function Export-ICNativeCommandOutput {
     [void](Write-ICUtf8File -Path $path -Content (($lines -join [Environment]::NewLine) + [Environment]::NewLine))
 
     return [pscustomobject][ordered]@{
-        Path     = $path
-        ExitCode = $result.ExitCode
-        Error    = $result.Error
+        Path            = $path
+        ExitCode        = $result.ExitCode
+        Error           = $result.Error
+        TimedOut        = $result.TimedOut
+        OutputTruncated = $result.OutputTruncated
+        OutputBytes     = $result.OutputBytes
     }
 }
 

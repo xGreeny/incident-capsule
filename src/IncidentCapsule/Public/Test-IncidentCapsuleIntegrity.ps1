@@ -5,27 +5,30 @@ function Test-IncidentCapsuleIntegrity {
 
     .DESCRIPTION
     Validates the embedded SHA-256 manifest, conventional checksum list, and file set.
-    ZIP archives are inspected against bounded path, entry-count, expanded-size, and
-    compression-ratio policies before any entry is extracted. When an adjacent .sha256
-    sidecar is present, its archive hash is also verified.
+    ZIP archives are inspected for unsafe paths, link metadata, duplicate entries, and
+    bounded entry count, per-entry size, expanded size, and compression ratio before
+    extraction. An adjacent .sha256 sidecar is verified when present.
 
     .PARAMETER Path
     Path to a capsule directory or ZIP archive.
 
+    .PARAMETER RequireSidecar
+    Reject a ZIP archive when its adjacent .sha256 sidecar is missing.
+
     .PARAMETER MaximumArchiveEntries
-    Maximum number of entries accepted from an archive.
+    Maximum number of ZIP entries inspected and extracted.
 
     .PARAMETER MaximumArchiveEntryBytes
-    Maximum declared and extracted size of one archive entry.
+    Maximum declared and extracted size of one ZIP entry.
 
     .PARAMETER MaximumArchiveExpandedBytes
-    Maximum total expanded size accepted from an archive.
+    Maximum total expanded ZIP size. MaximumArchiveUncompressedBytes remains an alias.
 
     .PARAMETER MaximumArchiveCompressionRatio
-    Maximum ratio between an entry's expanded and compressed sizes.
+    Maximum per-entry and aggregate ZIP compression ratio.
 
     .EXAMPLE
-    Test-IncidentCapsuleIntegrity -Path 'E:\Evidence\IC_IR-2026-0042_WS-042_20260712T184233Z.zip'
+    Test-IncidentCapsuleIntegrity -Path 'E:\Evidence\IC_IR-2026-0042_WS-042_20260712T184233Z.zip' -RequireSidecar
 
     .EXAMPLE
     $result = Test-IncidentCapsuleIntegrity -Path $capsule.WorkingDirectory
@@ -37,20 +40,27 @@ function Test-IncidentCapsuleIntegrity {
         [Alias('FullName')]
         [string]$Path,
 
+        [switch]$RequireSidecar,
+
         [ValidateRange(1, 50000)]
         [int]$MaximumArchiveEntries = 20000,
 
-        [ValidateRange(1, 2147483648L)]
+        [ValidateRange(1, 8796093022208L)]
         [int64]$MaximumArchiveEntryBytes = 1073741824L,
 
-        [ValidateRange(1, 21474836480L)]
-        [int64]$MaximumArchiveExpandedBytes = 10737418240L,
+        [Alias('MaximumArchiveUncompressedBytes')]
+        [ValidateRange(1, 8796093022208L)]
+        [int64]$MaximumArchiveExpandedBytes = 21474836480L,
 
         [ValidateRange(1, 1000)]
-        [int]$MaximumArchiveCompressionRatio = 250
+        [double]$MaximumArchiveCompressionRatio = 250
     )
 
     process {
+        if ($MaximumArchiveEntryBytes -gt $MaximumArchiveExpandedBytes) {
+            throw 'MaximumArchiveEntryBytes cannot exceed MaximumArchiveExpandedBytes.'
+        }
+
         $resolved = (Resolve-Path -LiteralPath $Path -ErrorAction Stop).Path
         if (Test-Path -LiteralPath $resolved -PathType Container) {
             $root = Find-ICManifestRoot -Path $resolved
@@ -64,6 +74,7 @@ function Test-IncidentCapsuleIntegrity {
 
         Test-ICArchiveIntegrity `
             -ArchivePath $resolved `
+            -RequireSidecar:$RequireSidecar `
             -MaximumArchiveEntries $MaximumArchiveEntries `
             -MaximumArchiveEntryBytes $MaximumArchiveEntryBytes `
             -MaximumArchiveExpandedBytes $MaximumArchiveExpandedBytes `

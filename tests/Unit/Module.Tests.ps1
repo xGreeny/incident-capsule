@@ -14,7 +14,8 @@ Describe 'IncidentCapsule module' {
         $commands | Should -Be @(
             'Get-IncidentCapsuleProfile',
             'Invoke-IncidentCapsule',
-            'Test-IncidentCapsuleIntegrity'
+            'Test-IncidentCapsuleIntegrity',
+            'Test-IncidentCapsuleReadiness'
         )
     }
 
@@ -28,5 +29,15 @@ Describe 'IncidentCapsule module' {
         $profiles.Count | Should -Be 3
         $profiles.Name | Should -Be @('Minimal', 'Standard', 'Extended')
         @($profiles | Where-Object { [string]::IsNullOrWhiteSpace($_.Description) }).Count | Should -Be 0
+    }
+
+    It 'exposes each complete profile configuration' {
+        $profileResult = Get-IncidentCapsuleProfile -Name Standard
+        $profileResult.Configuration.Count | Should -BeGreaterThan 20
+        foreach ($key in $profileResult.Configuration.Keys) {
+            $profileResult.PSObject.Properties.Name | Should -Contain $key
+        }
+        $profileResult.MaximumCapsuleBytes | Should -Be $profileResult.Configuration.MaximumCapsuleBytes
+        $profileResult.DataHandlingProfile | Should -Be 'Full'
     }
 }

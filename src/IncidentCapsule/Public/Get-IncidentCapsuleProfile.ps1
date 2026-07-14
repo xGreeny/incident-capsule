@@ -32,20 +32,16 @@ function Get-IncidentCapsuleProfile {
             'Extended' { 'Deeper collection with longer event coverage and bounded image/driver hashing.' }
         }
 
-        [pscustomobject][ordered]@{
-            PSTypeName                    = 'IncidentCapsule.Profile'
-            Name                          = $profileName
-            Description                   = $description
-            Collectors                    = @($configuration.Collectors)
-            EventLogs                     = @($configuration.EventLogs)
-            EventLookbackHours            = $configuration.EventLookbackHours
-            MaximumEventsPerLog           = $configuration.MaximumEventsPerLog
-            ExportEvtx                    = $configuration.ExportEvtx
-            ExportScheduledTaskXml        = $configuration.ExportScheduledTaskXml
-            IncludeProcessCommandLines    = $configuration.IncludeProcessCommandLines
-            HashProcessExecutables        = $configuration.HashProcessExecutables
-            MaximumExecutableHashes       = $configuration.MaximumExecutableHashes
-            CollectSignedDrivers          = $configuration.CollectSignedDrivers
+        $profileRecord = [ordered]@{
+            PSTypeName  = 'IncidentCapsule.Profile'
+            Name        = $profileName
+            Description = $description
         }
+        foreach ($configurationKey in $script:ICConfigurationKeys) {
+            $profileRecord[$configurationKey] = Copy-ICValue -Value $configuration[$configurationKey]
+        }
+        $profileRecord.Configuration = Copy-ICValue -Value $configuration
+
+        [pscustomobject]$profileRecord
     }
 }

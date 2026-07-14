@@ -146,3 +146,26 @@ jobs:
           path: out/TestResults-*.xml
           if-no-files-found: warn
           retention-days: 14
+
+  package-smoke:
+    name: Package / extracted artifact smoke test
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Build and smoke-test release package
+        shell: pwsh
+        run: ./build.ps1 -Task Package
+
+      - name: Upload validated package
+        uses: actions/upload-artifact@v7
+        with:
+          name: incident-capsule-package
+          path: |
+            out/incident-capsule-*.zip
+            out/incident-capsule-*.zip.sha256
+          if-no-files-found: error
+          retention-days: 14

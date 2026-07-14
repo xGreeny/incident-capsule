@@ -97,7 +97,39 @@ function Invoke-ICCollectors {
         $index++
         $percent = [int](($index - 1) / [math]::Max($names.Count, 1) * 100)
         Write-Progress -Activity 'Incident Capsule' -Status "Collecting $name ($index/$($names.Count))" -PercentComplete $percent
-        [void](Invoke-ICCollector -Context $Context -Name $name)
+
+        $budgetBefore = Get-ICCapsuleBudgetState -Context $Context
+        if ($budgetBefore.IsAtBudget) {
+            $reason = "Collector was skipped because the capsule reached its configured MaximumCapsuleBytes limit of $($budgetBefore.MaximumBytes) bytes."
+            [void](Add-ICSkippedCollectorResult -Context $Context -Name $name -Reason $reason)
+            continue
+        }
+
+        $result = Invoke-ICCollector -Context $Context -Name $name
+        $budgetAfter = Get-ICCapsuleBudgetState -Context $Context
+        if (-not $budgetAfter.IsWithinBudget) {
+            $warning = "Capsule size reached $($budgetAfter.CurrentBytes) bytes and exceeded the configured MaximumCapsuleBytes limit of $($budgetAfter.MaximumBytes) bytes; remaining collectors will be skipped."
+            if ($result.status -eq 'Succeeded') {
+                $result.status = 'Partial'
+            }
+            $result.warnings = @($result.warnings) + @($warning)
+            $limitIssue = New-ICStructuredIssue `
+                -Code 'LIMIT_REACHED' `
+                -Severity Warning `
+                -Component $name `
+                -Message $warning `
+                -Details ([ordered]@{
+                    currentBytes = $budgetAfter.CurrentBytes
+                    maximumBytes = $budgetAfter.MaximumBytes
+                })
+            if ($null -eq $result.PSObject.Properties['issues']) {
+                $result | Add-Member -NotePropertyName issues -NotePropertyValue @($limitIssue)
+            }
+            else {
+                $result.issues = @($result.issues) + @($limitIssue)
+            }
+            Write-ICLog -Context $Context -Level WARN -Component $name -Message $warning
+        }
     }
 
     Write-Progress -Activity 'Incident Capsule' -Completed
@@ -120,7 +152,7 @@ function Get-ICOverallStatus {
     if (@($CollectorResults | Where-Object status -eq 'Failed').Count -gt 0) {
         return 'CompletedWithErrors'
     }
-    if (@($CollectorResults | Where-Object status -eq 'Partial').Count -gt 0) {
+    if (@($CollectorResults | Where-Object { $_.status -in @('Partial', 'Skipped') }).Count -gt 0) {
         return 'CompletedWithWarnings'
     }
     return 'Completed'
@@ -152,6 +184,31 @@ function New-ICCapsuleMetadata {
 
     $completed = if ($null -ne $Context.CompletedAtUtc) { $Context.CompletedAtUtc } else { [datetime]::UtcNow }
     $duration = ($completed - $Context.StartedAtUtc).TotalSeconds
+    $collectionStatus = [string](Get-ICPropertyValue -InputObject $Context -Name 'CollectionStatus' -Default $Context.Status)
+    $finalizationStatus = [string](Get-ICPropertyValue -InputObject $Context -Name 'FinalizationStatus' -Default 'NotStarted')
+    $coverageData = Get-ICPropertyValue -InputObject $Context -Name 'Coverage'
+    $coveragePathValue = Get-ICPropertyValue -InputObject $Context -Name 'CoveragePath'
+    $coveragePath = if (-not [string]::IsNullOrWhiteSpace([string]$coveragePathValue)) {
+        Get-ICRelativePath -BasePath $Context.RootPath -Path ([string]$coveragePathValue)
+    }
+    else {
+        $null
+    }
+    $timelineData = Get-ICPropertyValue -InputObject $Context -Name 'Timeline'
+    $timelineJsonPathValue = Get-ICPropertyValue -InputObject $timelineData -Name 'JsonPath'
+    $timelineCsvPathValue = Get-ICPropertyValue -InputObject $timelineData -Name 'CsvPath'
+    $timelineJsonPath = if (-not [string]::IsNullOrWhiteSpace([string]$timelineJsonPathValue)) {
+        Get-ICRelativePath -BasePath $Context.RootPath -Path ([string]$timelineJsonPathValue)
+    }
+    else {
+        $null
+    }
+    $timelineCsvPath = if (-not [string]::IsNullOrWhiteSpace([string]$timelineCsvPathValue)) {
+        Get-ICRelativePath -BasePath $Context.RootPath -Path ([string]$timelineCsvPathValue)
+    }
+    else {
+        $null
+    }
 
     return [ordered]@{
         '$schema'     = $script:ICCapsuleSchema
@@ -162,10 +219,12 @@ function New-ICCapsuleMetadata {
             project = 'https://github.com/xGreeny/incident-capsule'
         }
         capsule = [ordered]@{
-            id      = $Context.CapsuleId
-            caseId  = $Context.CaseId
-            profile = $Context.Profile
-            status  = $Context.Status
+            id                 = $Context.CapsuleId
+            caseId             = $Context.CaseId
+            profile            = $Context.Profile
+            status             = $Context.Status
+            collectionStatus   = $collectionStatus
+            finalizationStatus = $finalizationStatus
         }
         host = [ordered]@{
             name    = $Context.HostName
@@ -175,6 +234,7 @@ function New-ICCapsuleMetadata {
             build   = $osBuild
         }
         collection = [ordered]@{
+            status          = $collectionStatus
             operator        = $Context.Operator
             executionUser   = Get-ICCurrentUser
             elevated        = [bool]$Context.IsElevated
@@ -182,6 +242,28 @@ function New-ICCapsuleMetadata {
             completedAtUtc  = $completed.ToString('o')
             durationSeconds = [math]::Round($duration, 3)
             fatalError      = $Context.FatalError
+        }
+        finalization = [ordered]@{
+            status = $finalizationStatus
+            note   = 'The embedded metadata is sealed before manifest and archive verification; the returned command result contains the terminal finalization state.'
+        }
+        coverage = [ordered]@{
+            available = $null -ne $coverageData
+            path      = $coveragePath
+            summary   = Copy-ICValue -Value (Get-ICPropertyValue -InputObject $coverageData -Name 'summary')
+        }
+        timeline = [ordered]@{
+            available             = $null -ne $timelineData
+            jsonPath              = $timelineJsonPath
+            csvPath               = $timelineCsvPath
+            sourceFiles           = Get-ICPropertyValue -InputObject $timelineData -Name 'SourceFiles'
+            sourceFilesRead       = Get-ICPropertyValue -InputObject $timelineData -Name 'SourceFilesRead'
+            sourceFilesFailed     = Get-ICPropertyValue -InputObject $timelineData -Name 'SourceFilesFailed'
+            candidateCount        = Get-ICPropertyValue -InputObject $timelineData -Name 'CandidateCount'
+            invalidTimestampCount = Get-ICPropertyValue -InputObject $timelineData -Name 'InvalidTimestampCount'
+            entryCount            = Get-ICPropertyValue -InputObject $timelineData -Name 'EntryCount'
+            maximumEntries        = Get-ICPropertyValue -InputObject $timelineData -Name 'MaximumEntries'
+            truncated             = Get-ICPropertyValue -InputObject $timelineData -Name 'Truncated'
         }
         configuration = Copy-ICValue -Value $Context.Configuration
         collectors = @($Context.CollectorResults)
