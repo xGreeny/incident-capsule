@@ -1,6 +1,6 @@
 @{
     RootModule        = 'IncidentCapsule.psm1'
-    ModuleVersion     = '1.1.1'
+    ModuleVersion     = '1.2.0'
     GUID              = 'f4f29bb2-65a6-4e50-8548-4547f4d4f9e6'
     Author            = 'xGreeny'
     CompanyName       = 'Community'
@@ -10,6 +10,7 @@
     CompatiblePSEditions = @('Desktop', 'Core')
 
     FunctionsToExport = @(
+        'Export-IncidentCapsuleData',
         'Get-IncidentCapsuleProfile',
         'Invoke-IncidentCapsule',
         'Test-IncidentCapsuleReadiness',
@@ -27,7 +28,7 @@
             )
             LicenseUri   = 'https://github.com/xGreeny/incident-capsule/blob/main/LICENSE'
             ProjectUri   = 'https://github.com/xGreeny/incident-capsule'
-            ReleaseNotes = 'Engine hardening: empty collector result sets no longer mask the original fatal error, out-of-root output warnings reach the collector log, and unit test coverage for engine failure paths and report generation is expanded.'
+            ReleaseNotes = 'Evidence depth and authentic handoff: InstalledSoftware, Certificates, ExecutionArtifacts, and Devices collectors, detached CMS manifest signing with -SigningCertificate and -RequireSignature, JSONL evidence export, extended lateral-movement event channels, and PowerShell Gallery distribution.'
         }
     }
 }

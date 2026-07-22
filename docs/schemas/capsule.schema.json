@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/xGreeny/incident-capsule/v1.1.0/docs/schemas/capsule.schema.json",
+  "$id": "https://raw.githubusercontent.com/xGreeny/incident-capsule/v1.2.0/docs/schemas/capsule.schema.json",
   "title": "Incident Capsule metadata",
   "type": "object",
   "required": [
@@ -19,7 +19,7 @@
     },
     "schemaVersion": {
       "type": "string",
-      "enum": ["1.0", "1.1"]
+      "enum": ["1.0", "1.1", "1.2"]
     },
     "tool": {
       "type": "object"

@@ -48,13 +48,13 @@ Describe 'Incident Capsule structured coverage' {
             $coverage.summary.selectedCollectors | Should -Be 2
             $coverage.summary.succeeded | Should -Be 1
             $coverage.summary.partial | Should -Be 1
-            $coverage.summary.notSelected | Should -Be 13
+            $coverage.summary.notSelected | Should -Be (@($script:ICCollectorDefinitions.Keys).Count - 2)
             @($coverage.issues).Count | Should -Be 2
             $coverage.issues.code | Should -Contain 'ACCESS_DENIED'
             $coverage.issues.code | Should -Contain 'LIMIT_REACHED'
             @($coverage.issues | Where-Object code -eq 'LIMIT_REACHED').Count | Should -Be 1
             ($coverage.issues | Where-Object code -eq 'LIMIT_REACHED').details.MaximumEvents | Should -Be 250
-            $coverage.schemaVersion | Should -Be '1.1'
+            $coverage.schemaVersion | Should -Be '1.2'
         }
     }
 
@@ -88,7 +88,7 @@ Describe 'Incident Capsule structured coverage' {
             $coverage.summary.selectedCollectors | Should -Be 1
             $coverage.summary.notRun | Should -Be 1
             $coverage.summary.issueCount | Should -Be 0
-            @($coverage.collectors).Count | Should -Be 15
+            @($coverage.collectors).Count | Should -Be (@($script:ICCollectorDefinitions.Keys).Count)
             @($coverage.issues).Count | Should -Be 0
         }
     }

@@ -27,11 +27,14 @@ IC_IR-2026-0042_WS-042_20260712T184233Z_a1b2c3d4/
 │   ├── timeline.csv
 │   └── timeline.json
 ├── evidence/
+│   ├── certificates/
 │   ├── defender/
+│   ├── devices/
 │   ├── drivers/
 │   ├── events/
 │   │   ├── evtx/
 │   │   └── summaries/
+│   ├── execution/
 │   ├── hotfixes/
 │   ├── identities/
 │   ├── network/
@@ -42,6 +45,7 @@ IC_IR-2026-0042_WS-042_20260712T184233Z_a1b2c3d4/
 │   ├── security/
 │   ├── services/
 │   ├── sessions/
+│   ├── software/
 │   ├── storage/
 │   └── system/
 ├── logs/
@@ -65,16 +69,23 @@ The report is self-contained and opens offline. JSON files use a common evidence
 
 Open an elevated PowerShell session when the response procedure permits it. Non-elevated execution is supported, but protected event channels and parts of the security configuration can be unavailable.
 
+The module is published to the PowerShell Gallery:
+
+```powershell
+Install-Module IncidentCapsule -Scope CurrentUser
+Invoke-IncidentCapsule -OutputPath 'C:\IR\Cases' -CaseId 'IR-2026-0042' -Profile Standard
+```
+
 For a downloaded release, keep the ZIP and its `.sha256` sidecar together, verify the hash, and run the launcher from the extracted package:
 
 ```powershell
-$archive = '.\incident-capsule-1.1.0.zip'
+$archive = '.\incident-capsule-1.2.0.zip'
 $expectedHash = ((Get-Content "$archive.sha256" -Raw).Trim() -split '\s+')[0]
 $actualHash = (Get-FileHash $archive -Algorithm SHA256).Hash
 if ($actualHash -ne $expectedHash) { throw 'Release checksum mismatch.' }
 
 Expand-Archive $archive -DestinationPath .\incident-capsule-release
-Set-Location .\incident-capsule-release\incident-capsule-1.1.0
+Set-Location .\incident-capsule-release\incident-capsule-1.2.0
 .\Invoke-IncidentCapsule.ps1 -OutputPath 'C:\IR\Cases' -CaseId 'IR-2026-0042'
 ```
 
@@ -152,6 +163,10 @@ Get-IncidentCapsuleProfile -Name Extended | Format-List *
 | `Hotfixes` | QFE records and bounded Windows Update history | Update history depends on Windows Update interfaces |
 | `Drivers` | System drivers, optional signed PnP inventory, `driverquery` output | Usually low |
 | `EventLogs` | Bounded summaries and optional native EVTX exports from curated channels | Security and protected channels require elevation |
+| `InstalledSoftware` | Installed-software inventory from machine and loaded per-user uninstall registry keys | Usually low; per-user hives must already be loaded |
+| `Certificates` | Local-machine root, intermediate, publisher, people, and disallowed trust stores | Usually low |
+| `ExecutionArtifacts` | Bounded prefetch copies, raw AppCompatCache export, BAM records, decoded UserAssist entries | Prefetch access requires elevation; prefetch can be disabled on servers |
+| `Devices` | USB storage history, mounted devices, per-user mount points, portable devices, bounded `setupapi.dev.log` | Usually low |
 
 The complete output contract and caveats are in [Collector reference](docs/collector-reference.md).
 
@@ -207,6 +222,32 @@ Incident Capsule separates acquisition from verification:
 $verification = Test-IncidentCapsuleIntegrity -Path 'E:\Evidence\IC_IR-2026-0042_WS-042_20260712T184233Z_a1b2c3d4.zip' -RequireSidecar
 $verification | Format-List
 $verification.FileResults | Where-Object Status -ne 'Valid'
+```
+
+### Manifest signing
+
+Checksums alone cannot prove who sealed a capsule: an actor with write access can replace evidence and recalculate every hash. An organizational code-signing certificate closes that gap. When `-SigningCertificate` is supplied, the checksum list receives a detached CMS signature `metadata/manifest.sha256.p7s` that travels inside the capsule and the archive, and the built-in archive verification requires it:
+
+```powershell
+Invoke-IncidentCapsule `
+    -OutputPath 'E:\Evidence' `
+    -CaseId 'IR-2026-0042' `
+    -SigningCertificate '2E9C4F6A0B1D8E3C5A7F9B2D4E6C8A0F1B3D5E7C'
+
+Test-IncidentCapsuleIntegrity -Path $result.ArchivePath -RequireSidecar -RequireSignature
+```
+
+Cryptographic validity and certificate-chain trust are reported separately, so verification works offline and with internal CAs. Protect the signing key like any other incident-response credential.
+
+## SIEM export
+
+`Export-IncidentCapsuleData` flattens the structured evidence envelopes of a collected capsule into line-delimited JSON for Splunk, Sentinel, Timesketch, and similar tooling. Every line carries capsule ID, host, collector, capture time, and the capsule-relative source file next to the unmodified record. The export is written beside the capsule, never into it:
+
+```powershell
+$export = Export-IncidentCapsuleData -Path $result.WorkingDirectory
+$export | Format-List
+
+Export-IncidentCapsuleData -Path $result.WorkingDirectory -Collector Processes,Network -DestinationPath 'E:\Evidence\network-triage.jsonl'
 ```
 
 ## Safety properties

@@ -30,7 +30,10 @@ function Get-ICDefaultEventLogs {
         'Microsoft-Windows-Windows Firewall With Advanced Security/Firewall',
         'Microsoft-Windows-SMBServer/Security',
         'Microsoft-Windows-Kernel-PnP/Configuration',
-        'Microsoft-Windows-GroupPolicy/Operational'
+        'Microsoft-Windows-GroupPolicy/Operational',
+        'Microsoft-Windows-WinRM/Operational',
+        'Microsoft-Windows-PrintService/Operational',
+        'OpenSSH/Operational'
     )
 
     switch ($Profile) {
@@ -67,7 +70,7 @@ function Get-ICDefaultConfiguration {
     $profileConfiguration = switch ($Profile) {
         'Minimal' {
             [ordered]@{
-                Collectors                   = @('System', 'Storage', 'Processes', 'Services', 'Network', 'Sessions', 'LocalAccounts', 'Defender', 'PowerShell', 'SecurityConfiguration', 'EventLogs')
+                Collectors                   = @('System', 'Storage', 'Processes', 'Services', 'Network', 'Sessions', 'LocalAccounts', 'Defender', 'PowerShell', 'SecurityConfiguration', 'EventLogs', 'InstalledSoftware', 'Certificates')
                 EventLogs                    = @(Get-ICDefaultEventLogs -Profile Minimal)
                 EventLookbackHours           = 12
                 MaximumEventsPerLog          = 250
@@ -90,6 +93,8 @@ function Get-ICDefaultConfiguration {
                 CollectSignedDrivers         = $false
                 MaximumSignedDrivers         = 2500
                 MaximumFirewallRules         = 2000
+                MaximumPrefetchFiles         = 256
+                MaximumArtifactFileBytes     = 8388608L
             }
         }
         'Standard' {
@@ -117,6 +122,8 @@ function Get-ICDefaultConfiguration {
                 CollectSignedDrivers         = $false
                 MaximumSignedDrivers         = 5000
                 MaximumFirewallRules         = 5000
+                MaximumPrefetchFiles         = 512
+                MaximumArtifactFileBytes     = 33554432L
             }
         }
         'Extended' {
@@ -144,6 +151,8 @@ function Get-ICDefaultConfiguration {
                 CollectSignedDrivers         = $true
                 MaximumSignedDrivers         = 10000
                 MaximumFirewallRules         = 10000
+                MaximumPrefetchFiles         = 1024
+                MaximumArtifactFileBytes     = 134217728L
             }
         }
     }

@@ -225,3 +225,60 @@ jobs:
           if ($LASTEXITCODE -ne 0) {
               throw "GitHub release command failed with exit code $LASTEXITCODE."
           }
+
+  publish-psgallery:
+    name: Publish to PowerShell Gallery
+    needs: publish-release
+    runs-on: windows-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Publish module to the PowerShell Gallery
+        shell: pwsh
+        env:
+          PSGALLERY_API_KEY: ${{ secrets.PSGALLERY_API_KEY }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          if ([string]::IsNullOrWhiteSpace($env:PSGALLERY_API_KEY)) {
+              throw 'The PSGALLERY_API_KEY secret is not configured.'
+          }
+
+          $manifest = Test-ModuleManifest `
+            -Path ./src/IncidentCapsule/IncidentCapsule.psd1 `
+            -ErrorAction Stop
+
+          $expectedTag = "v$($manifest.Version)"
+          if ($env:GITHUB_REF_NAME -ne $expectedTag) {
+              throw "Tag '$env:GITHUB_REF_NAME' does not match module version '$expectedTag'."
+          }
+
+          $existing = $null
+          try {
+              $existing = Find-Module `
+                -Name IncidentCapsule `
+                -RequiredVersion $manifest.Version `
+                -Repository PSGallery `
+                -ErrorAction Stop
+          }
+          catch {
+              $existing = $null
+          }
+
+          if ($null -ne $existing) {
+              Write-Host "IncidentCapsule $($manifest.Version) is already published; skipping upload."
+              return
+          }
+
+          Publish-Module `
+            -Path ./src/IncidentCapsule `
+            -NuGetApiKey $env:PSGALLERY_API_KEY `
+            -Repository PSGallery `
+            -ErrorAction Stop
+
+          Write-Host "Published IncidentCapsule $($manifest.Version) to the PowerShell Gallery."

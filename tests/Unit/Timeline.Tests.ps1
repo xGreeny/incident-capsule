@@ -54,7 +54,7 @@ Describe 'Incident Capsule derived timeline' {
             $result.CsvPath | Should -Exist
 
             $timelineJson = Get-Content -LiteralPath $result.JsonPath -Raw -Encoding UTF8 | ConvertFrom-Json
-            $timelineJson.schemaVersion | Should -Be '1.1'
+            $timelineJson.schemaVersion | Should -Be '1.2'
             @($timelineJson.entries).Count | Should -Be 2
             $timelineJson.entries[1].title | Should -Be '=SUM(1,1)'
             (Get-Content -LiteralPath $result.CsvPath -Raw -Encoding UTF8) | Should -Match "'=SUM\(1,1\)"

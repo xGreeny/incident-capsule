@@ -207,6 +207,64 @@ All paths below are relative to the capsule root. JSON files use the common coll
 
 **Notes:** decoded messages can be locale-dependent and can contain sensitive data. EVTX export uses the profile's lookback query and does not clear or mutate the source channel. An export larger than `MaximumEvtxBytesPerLog` is removed and reported as a structured limit issue rather than retained outside the declared budget.
 
+## InstalledSoftware
+
+**Purpose:** inventory installed software from the uninstall registry keys.
+
+**Output:**
+
+- `evidence/software/installed-software.json`
+- `evidence/software/installed-software.csv`
+
+**Fields:** scope (machine, 32-bit machine, or per-user SID), display name/version, publisher, install date/location/source, uninstall strings, estimated size, system-component and Windows-Installer flags, and the source registry key.
+
+**Notes:** `Win32_Product` is deliberately not queried because enumerating it triggers MSI consistency checks that can reconfigure installed products. Per-user entries cover only registry hives that are already loaded.
+
+## Certificates
+
+**Purpose:** inventory the local-machine trust configuration to surface added or anomalous roots and publishers.
+
+**Output:**
+
+- `evidence/certificates/certificate-stores.json`
+- `evidence/certificates/certificate-stores.csv`
+
+**Fields:** store (Root, CA, AuthRoot, TrustedPublisher, TrustedPeople, Disallowed), subject, issuer, thumbprint, serial number, validity window, signature and key algorithms, enhanced key usages, self-signed flag, private-key presence, and archived flag.
+
+**Notes:** only certificate metadata is collected; no key material is exported. A non-self-signed entry in the Root store is unusual and worth review.
+
+## ExecutionArtifacts
+
+**Purpose:** preserve host execution evidence for "what ran here" questions.
+
+**Output:**
+
+- `evidence/execution/prefetch-files.json` and `.csv`
+- `evidence/execution/prefetch/<name>.pf` copies, bounded by `MaximumPrefetchFiles` and `MaximumArtifactFileBytes`
+- `evidence/execution/appcompatcache.json` and `appcompatcache.bin`
+- `evidence/execution/bam-entries.json` and `.csv`
+- `evidence/execution/userassist-entries.json` and `.csv`
+
+**Fields:** prefetch metadata with copy status, raw AppCompatCache length and SHA-256, BAM SID/path/last-execution timestamps, and ROT13-decoded UserAssist names with run counts and best-effort last-execution timestamps.
+
+**Notes:** the AppCompatCache (Shimcache) value is exported as raw bytes for offline parsing; the binary layout differs between Windows versions. Prefetch requires elevation and can be disabled on server SKUs; missing sources are recorded as partial coverage, not failure. Amcache and SRUM are intentionally out of scope because reading them would require snapshot creation or raw device access.
+
+## Devices
+
+**Purpose:** reconstruct removable-device and volume attachment history for data-movement questions.
+
+**Output:**
+
+- `evidence/devices/usb-storage.json` and `.csv`
+- `evidence/devices/mounted-devices.json` and `.csv`
+- `evidence/devices/mountpoints.json` and `.csv`
+- `evidence/devices/portable-devices.json` and `.csv`
+- `evidence/devices/setupapi-log.json` and a copy of `setupapi.dev.log`, bounded by `MaximumArtifactFileBytes`
+
+**Fields:** USBSTOR device class, serial, friendly name, manufacturer, service, container ID, and hardware IDs; MountedDevices values decoded where printable with a bounded hex prefix otherwise; per-user MountPoints2 entries; Windows Portable Devices registrations; and setup-log metadata with copy status.
+
+**Notes:** a `setupapi.dev.log` above the byte bound is recorded as metadata only and reported as a bounded copy. Per-user mount points cover only loaded registry hives.
+
 ## Cross-collector indexes
 
 Every completed capsule also contains:

@@ -4,6 +4,27 @@ All notable changes to Incident Capsule are documented in this file. The project
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-07-22
+
+### Added
+
+- `InstalledSoftware` collector: machine, 32-bit, and loaded per-user uninstall-key inventory without touching `Win32_Product`.
+- `Certificates` collector: local-machine Root, CA, AuthRoot, TrustedPublisher, TrustedPeople, and Disallowed store metadata without key material.
+- `ExecutionArtifacts` collector: bounded prefetch copies, raw AppCompatCache (Shimcache) export, BAM execution records, and ROT13-decoded UserAssist entries.
+- `Devices` collector: USBSTOR history, MountedDevices, per-user MountPoints2, Windows Portable Devices, and a bounded `setupapi.dev.log` copy.
+- Detached CMS manifest signing via `Invoke-IncidentCapsule -SigningCertificate`, producing `metadata/manifest.sha256.p7s`, with verification through `Test-IncidentCapsuleIntegrity -RequireSignature`, signer details in integrity results and verification receipts, and enforced signature checks during archive finalization of signed capsules.
+- `Export-IncidentCapsuleData`: line-delimited JSON export of capsule evidence envelopes for SIEM and timeline ingestion, written outside the sealed capsule.
+- `MaximumPrefetchFiles` and `MaximumArtifactFileBytes` configuration bounds with per-profile defaults.
+- Extended-profile event channels: `Microsoft-Windows-WinRM/Operational`, `Microsoft-Windows-PrintService/Operational`, and `OpenSSH/Operational`.
+- Automated PowerShell Gallery publication of tagged releases.
+- Unit tests for the new collectors, manifest signing, and the JSONL exporter.
+
+### Changed
+
+- Schema version 1.2 for capsule metadata, collector envelopes, manifests, coverage, timelines, and verification receipts; 1.0 and 1.1 inputs remain accepted.
+- The Minimal profile now includes the fast `InstalledSoftware` and `Certificates` collectors; Standard and Extended include all four new collectors.
+- Verification receipts now record signature presence, validity, and signer details.
+
 ## [1.1.1] - 2026-07-22
 
 ### Added
@@ -95,6 +116,7 @@ All notable changes to Incident Capsule are documented in this file. The project
 - Pester tests, PSScriptAnalyzer integration, continuous integration, and tagged-release packaging.
 - Security, evidence-handling, architecture, configuration, and collector-reference documentation.
 
+[1.2.0]: https://github.com/xGreeny/incident-capsule/releases/tag/v1.2.0
 [1.1.1]: https://github.com/xGreeny/incident-capsule/releases/tag/v1.1.1
 [1.1.0]: https://github.com/xGreeny/incident-capsule/releases/tag/v1.1.0
 [1.0.1]: https://github.com/xGreeny/incident-capsule/releases/tag/v1.0.1

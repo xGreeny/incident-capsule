@@ -15,6 +15,11 @@ function Test-IncidentCapsuleIntegrity {
     .PARAMETER RequireSidecar
     Reject a ZIP archive when its adjacent .sha256 sidecar is missing.
 
+    .PARAMETER RequireSignature
+    Reject a capsule when the detached CMS manifest signature
+    metadata/manifest.sha256.p7s is missing. When the signature is present it is
+    always verified; chain trust is reported separately from cryptographic validity.
+
     .PARAMETER MaximumArchiveEntries
     Maximum number of ZIP entries inspected and extracted.
 
@@ -42,6 +47,8 @@ function Test-IncidentCapsuleIntegrity {
 
         [switch]$RequireSidecar,
 
+        [switch]$RequireSignature,
+
         [ValidateRange(1, 50000)]
         [int]$MaximumArchiveEntries = 20000,
 
@@ -64,7 +71,11 @@ function Test-IncidentCapsuleIntegrity {
         $resolved = (Resolve-Path -LiteralPath $Path -ErrorAction Stop).Path
         if (Test-Path -LiteralPath $resolved -PathType Container) {
             $root = Find-ICManifestRoot -Path $resolved
-            Test-ICDirectoryIntegrity -CapsuleRoot $root
+            $result = Test-ICDirectoryIntegrity -CapsuleRoot $root
+            if ($RequireSignature -and -not $result.SignaturePresent) {
+                throw "Required manifest signature 'metadata/manifest.sha256.p7s' was not found in '$root'."
+            }
+            $result
             return
         }
 
@@ -75,6 +86,7 @@ function Test-IncidentCapsuleIntegrity {
         Test-ICArchiveIntegrity `
             -ArchivePath $resolved `
             -RequireSidecar:$RequireSidecar `
+            -RequireSignature:$RequireSignature `
             -MaximumArchiveEntries $MaximumArchiveEntries `
             -MaximumArchiveEntryBytes $MaximumArchiveEntryBytes `
             -MaximumArchiveExpandedBytes $MaximumArchiveExpandedBytes `

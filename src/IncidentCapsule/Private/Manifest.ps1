@@ -157,7 +157,7 @@ function Get-ICManifestFiles {
         [string]$CapsuleRoot
     )
 
-    $excluded = @('metadata/manifest.json', 'metadata/manifest.sha256')
+    $excluded = @('metadata/manifest.json', 'metadata/manifest.sha256', 'metadata/manifest.sha256.p7s')
     return @(
         Get-ICSafeCapsuleFile -CapsuleRoot $CapsuleRoot |
             ForEach-Object {
@@ -363,7 +363,7 @@ function Read-ICValidatedManifest {
         throw "Manifest '$manifestPath' does not contain a schemaVersion."
     }
     $schemaVersion = [string](Get-ICPropertyValue -InputObject $manifest -Name 'schemaVersion')
-    if ($schemaVersion -notin @('1.0', '1.1')) {
+    if ($schemaVersion -notin @('1.0', '1.1', '1.2')) {
         throw "Manifest '$manifestPath' uses unsupported schema version '$schemaVersion'."
     }
     if (-not (Test-ICObjectProperty -InputObject $manifest -Name 'algorithm') -or [string]$manifest.algorithm -ne 'SHA-256') {
@@ -395,7 +395,7 @@ function Read-ICValidatedManifest {
         }
 
         $validatedPath = Resolve-ICSafeRelativePath -RelativePath ([string]$entry.path) -RootPath $root -Description "Manifest path at index $index"
-        if ($validatedPath.RelativePath -in @('metadata/manifest.json', 'metadata/manifest.sha256')) {
+        if ($validatedPath.RelativePath -in @('metadata/manifest.json', 'metadata/manifest.sha256', 'metadata/manifest.sha256.p7s')) {
             throw "Manifest file entry $index references a manifest control file."
         }
         if (-not $expectedPaths.Add($validatedPath.RelativePath)) {
@@ -537,7 +537,7 @@ function Test-ICDirectoryIntegrity {
         })
     }
 
-    $excluded = @('metadata/manifest.json', 'metadata/manifest.sha256')
+    $excluded = @('metadata/manifest.json', 'metadata/manifest.sha256', 'metadata/manifest.sha256.p7s')
     foreach ($file in Get-ICSafeCapsuleFile -CapsuleRoot $root) {
         $relative = Get-ICRelativePath -BasePath $root -Path $file.FullName
         if ($relative -in $excluded) {
@@ -561,22 +561,43 @@ function Test-ICDirectoryIntegrity {
     $unexpected = @($fileResults | Where-Object Status -eq 'Unexpected').Count
     $valid = @($fileResults | Where-Object Status -eq 'Valid').Count
 
+    $signaturePresent = $false
+    $signatureValid = $null
+    $signatureChainValid = $null
+    $signerSubject = $null
+    $signerThumbprint = $null
+    $signaturePath = Join-Path $root 'metadata/manifest.sha256.p7s'
+    if (Test-Path -LiteralPath $signaturePath -PathType Leaf) {
+        Assert-ICNoReparsePoint -RootPath $root -Path $signaturePath
+        $signaturePresent = $true
+        $signature = Test-ICManifestSignature -ManifestTextPath (Join-Path $root 'metadata/manifest.sha256') -SignaturePath $signaturePath
+        $signatureValid = [bool]$signature.SignatureValid
+        $signatureChainValid = $signature.ChainValid
+        $signerSubject = $signature.SignerSubject
+        $signerThumbprint = $signature.SignerThumbprint
+    }
+
     return [pscustomobject][ordered]@{
-        PSTypeName        = 'IncidentCapsule.IntegrityResult'
-        Path              = $root
-        SourceType        = 'Directory'
-        CapsuleId         = [string]$manifest.capsuleId
-        SchemaVersion     = [string]$manifest.schemaVersion
-        Algorithm         = [string]$manifest.algorithm
-        IsValid           = ($missing -eq 0 -and $modified -eq 0 -and $unexpected -eq 0 -and $checksumListValid)
-        ArchiveHashValid  = $null
-        ChecksumListValid = $checksumListValid
-        FilesExpected     = $entries.Count
-        FilesValid        = $valid
-        FilesMissing      = $missing
-        FilesModified     = $modified
-        FilesUnexpected   = $unexpected
-        FileResults       = @($fileResults)
+        PSTypeName          = 'IncidentCapsule.IntegrityResult'
+        Path                = $root
+        SourceType          = 'Directory'
+        CapsuleId           = [string]$manifest.capsuleId
+        SchemaVersion       = [string]$manifest.schemaVersion
+        Algorithm           = [string]$manifest.algorithm
+        IsValid             = ($missing -eq 0 -and $modified -eq 0 -and $unexpected -eq 0 -and $checksumListValid -and ($signatureValid -ne $false))
+        ArchiveHashValid    = $null
+        ChecksumListValid   = $checksumListValid
+        SignaturePresent    = $signaturePresent
+        SignatureValid      = $signatureValid
+        SignatureChainValid = $signatureChainValid
+        SignerSubject       = $signerSubject
+        SignerThumbprint    = $signerThumbprint
+        FilesExpected       = $entries.Count
+        FilesValid          = $valid
+        FilesMissing        = $missing
+        FilesModified       = $modified
+        FilesUnexpected     = $unexpected
+        FileResults         = @($fileResults)
     }
 }
 
@@ -871,6 +892,8 @@ function Test-ICArchiveIntegrity {
 
         [switch]$RequireSidecar,
 
+        [switch]$RequireSignature,
+
         [int]$MaximumArchiveEntries = 20000,
 
         [int64]$MaximumArchiveEntryBytes = 1073741824L,
@@ -916,6 +939,9 @@ function Test-ICArchiveIntegrity {
 
         $root = Find-ICManifestRoot -Path $temporaryRoot
         $result = Test-ICDirectoryIntegrity -CapsuleRoot $root
+        if ($RequireSignature -and -not $result.SignaturePresent) {
+            throw "Required manifest signature 'metadata/manifest.sha256.p7s' was not found in the archive."
+        }
         $result.Path = $resolvedArchive
         $result.SourceType = 'Archive'
         $result.ArchiveHashValid = $archiveHashValid
@@ -962,6 +988,10 @@ function Write-ICVerificationReceipt {
         filesMissing       = $Verification.FilesMissing
         filesModified      = $Verification.FilesModified
         filesUnexpected    = $Verification.FilesUnexpected
+        signaturePresent   = [bool](Get-ICPropertyValue -InputObject $Verification -Name 'SignaturePresent' -Default $false)
+        signatureValid     = Get-ICPropertyValue -InputObject $Verification -Name 'SignatureValid'
+        signerSubject      = Get-ICPropertyValue -InputObject $Verification -Name 'SignerSubject'
+        signerThumbprint   = Get-ICPropertyValue -InputObject $Verification -Name 'SignerThumbprint'
         archivePolicy      = $Verification.ArchivePolicy
     }
 

@@ -32,6 +32,13 @@ function Invoke-IncidentCapsule {
     .PARAMETER ExcludeCollector
     Collector names removed after profile, configuration, and explicit selection are resolved.
 
+    .PARAMETER SigningCertificate
+    Optional code-signing certificate (X509Certificate2 object or thumbprint in
+    Cert:\CurrentUser\My or Cert:\LocalMachine\My) with an accessible private key.
+    When present, the checksum list metadata/manifest.sha256 receives a detached
+    CMS signature metadata/manifest.sha256.p7s that travels inside the capsule
+    and the archive, and archive verification requires that signature.
+
     .PARAMETER NoCompression
     Keep the evidence directory without creating a ZIP archive.
 
@@ -66,16 +73,21 @@ function Invoke-IncidentCapsule {
         [ValidateSet(
             'System', 'Storage', 'Processes', 'Services', 'Network', 'Sessions',
             'LocalAccounts', 'ScheduledTasks', 'Persistence', 'Defender', 'PowerShell',
-            'SecurityConfiguration', 'Hotfixes', 'Drivers', 'EventLogs'
+            'SecurityConfiguration', 'Hotfixes', 'Drivers', 'EventLogs',
+            'InstalledSoftware', 'Certificates', 'ExecutionArtifacts', 'Devices'
         )]
         [string[]]$Collectors,
 
         [ValidateSet(
             'System', 'Storage', 'Processes', 'Services', 'Network', 'Sessions',
             'LocalAccounts', 'ScheduledTasks', 'Persistence', 'Defender', 'PowerShell',
-            'SecurityConfiguration', 'Hotfixes', 'Drivers', 'EventLogs'
+            'SecurityConfiguration', 'Hotfixes', 'Drivers', 'EventLogs',
+            'InstalledSoftware', 'Certificates', 'ExecutionArtifacts', 'Devices'
         )]
         [string[]]$ExcludeCollector,
+
+        [AllowNull()]
+        [object]$SigningCertificate,
 
         [switch]$NoCompression,
 
@@ -104,6 +116,11 @@ function Invoke-IncidentCapsule {
     }
     if ($PSBoundParameters.ContainsKey('ExcludeCollector')) {
         $configurationParameters.ExcludeCollector = $ExcludeCollector
+    }
+
+    $resolvedSigningCertificate = $null
+    if ($PSBoundParameters.ContainsKey('SigningCertificate') -and $null -ne $SigningCertificate) {
+        $resolvedSigningCertificate = Resolve-ICSigningCertificate -Certificate $SigningCertificate
     }
 
     $configuration = Resolve-ICConfiguration @configurationParameters
@@ -216,10 +233,14 @@ function Invoke-IncidentCapsule {
     $verification = $null
     $archiveVerification = $null
     $verificationReceiptPath = $null
+    $manifestSignature = $null
     try {
         $manifestResult = New-ICManifest -CapsuleRoot $context.RootPath -CapsuleId $context.CapsuleId
         $context.ManifestPath = $manifestResult.ManifestPath
         $context.ManifestTextPath = $manifestResult.TextPath
+        if ($null -ne $resolvedSigningCertificate) {
+            $manifestSignature = New-ICManifestSignature -ManifestTextPath $manifestResult.TextPath -Certificate $resolvedSigningCertificate
+        }
         $sealedBudgetState = Get-ICCapsuleBudgetState -Context $context
         if (-not $sealedBudgetState.IsWithinBudget) {
             throw (New-Object System.IO.InvalidDataException(
@@ -267,6 +288,7 @@ function Invoke-IncidentCapsule {
             $archiveVerification = Test-IncidentCapsuleIntegrity `
                 -Path $archiveResult.ArchivePath `
                 -RequireSidecar `
+                -RequireSignature:($null -ne $manifestSignature) `
                 -MaximumArchiveEntries ([int]$configuration.MaximumArchiveEntries) `
                 -MaximumArchiveEntryBytes ([int64]$configuration.MaximumArchiveEntryBytes) `
                 -MaximumArchiveExpandedBytes ([int64]$configuration.MaximumArchiveExpandedBytes) `
@@ -349,6 +371,9 @@ function Invoke-IncidentCapsule {
         WorkingDirectory       = $workingDirectory
         ReportPath             = $reportPath
         ManifestPath           = if ($null -ne $workingDirectory) { $context.ManifestPath } else { $null }
+        ManifestSignaturePath  = if ($null -ne $manifestSignature -and $null -ne $workingDirectory) { $manifestSignature.SignaturePath } else { $null }
+        SignerSubject          = if ($null -ne $manifestSignature) { $manifestSignature.SignerSubject } else { $null }
+        SignerThumbprint       = if ($null -ne $manifestSignature) { $manifestSignature.SignerThumbprint } else { $null }
         ArchivePath            = $context.ArchivePath
         ArchiveChecksumPath    = $context.ArchiveHashPath
         ArchiveVerificationPath = $verificationReceiptPath

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/xGreeny/incident-capsule/v1.1.0/docs/schemas/verification-receipt.schema.json",
+  "$id": "https://raw.githubusercontent.com/xGreeny/incident-capsule/v1.2.0/docs/schemas/verification-receipt.schema.json",
   "title": "Incident Capsule archive verification receipt",
   "type": "object",
   "required": [
@@ -18,7 +18,7 @@
   ],
   "properties": {
     "$schema": { "type": "string" },
-    "schemaVersion": { "type": "string", "enum": ["1.0", "1.1"] },
+    "schemaVersion": { "type": "string", "enum": ["1.0", "1.1", "1.2"] },
     "verifiedAtUtc": { "type": "string", "format": "date-time" },
     "verifier": {
       "type": "object",
@@ -39,6 +39,10 @@
     "filesMissing": { "type": "integer", "minimum": 0 },
     "filesModified": { "type": "integer", "minimum": 0 },
     "filesUnexpected": { "type": "integer", "minimum": 0 },
+    "signaturePresent": { "type": "boolean" },
+    "signatureValid": { "type": ["boolean", "null"] },
+    "signerSubject": { "type": ["string", "null"] },
+    "signerThumbprint": { "type": ["string", "null"] },
     "archivePolicy": { "type": ["object", "null"] }
   },
   "additionalProperties": false

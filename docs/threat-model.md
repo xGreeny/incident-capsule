@@ -61,7 +61,7 @@ A kernel implant, API hook, malicious WMI provider, replaced inbox binary, or ED
 
 ### Authenticity against a writer
 
-An actor who can modify the capsule and checksum files can recalculate SHA-256. Preserve the archive checksum in a separate trusted system or apply organizational digital signatures.
+An actor who can modify the capsule and checksum files can recalculate SHA-256. `-SigningCertificate` mitigates this by sealing the checksum list with a detached CMS signature (`metadata/manifest.sha256.p7s`) from an organizational code-signing certificate; `Test-IncidentCapsuleIntegrity -RequireSignature` then rejects capsules whose signature is missing or cryptographically invalid. The mitigation is only as strong as the protection of the signing key and the trust decisions around the signer chain, and an unsigned capsule still relies on preserving the archive checksum in a separate trusted system.
 
 ### Complete forensic acquisition
 

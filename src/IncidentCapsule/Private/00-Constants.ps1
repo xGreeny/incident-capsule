@@ -4,7 +4,7 @@ $moduleManifestData = Import-PowerShellDataFile -LiteralPath $moduleManifestPath
 
 $script:ICName = 'Incident Capsule'
 $script:ICVersion = [string]$moduleManifestData.ModuleVersion
-$script:ICSchemaVersion = '1.1'
+$script:ICSchemaVersion = '1.2'
 $script:ICCollectorSchema = "https://raw.githubusercontent.com/xGreeny/incident-capsule/v$($script:ICVersion)/docs/schemas/collector-envelope.schema.json"
 $script:ICCapsuleSchema = "https://raw.githubusercontent.com/xGreeny/incident-capsule/v$($script:ICVersion)/docs/schemas/capsule.schema.json"
 $script:ICManifestSchema = "https://raw.githubusercontent.com/xGreeny/incident-capsule/v$($script:ICVersion)/docs/schemas/manifest.schema.json"
@@ -73,6 +73,22 @@ $script:ICCollectorDefinitions = [ordered]@{
         Function    = 'Get-ICEventLogEvidence'
         Description = 'Bounded decoded event summaries and optional native EVTX exports.'
     }
+    InstalledSoftware = [ordered]@{
+        Function    = 'Get-ICInstalledSoftwareEvidence'
+        Description = 'Installed-software inventory from machine and loaded per-user uninstall registry keys.'
+    }
+    Certificates = [ordered]@{
+        Function    = 'Get-ICCertificateEvidence'
+        Description = 'Local-machine trust store inventory: root, intermediate, publisher, people, and disallowed certificates.'
+    }
+    ExecutionArtifacts = [ordered]@{
+        Function    = 'Get-ICExecutionArtifactEvidence'
+        Description = 'Bounded prefetch copies, raw AppCompatCache export, BAM execution records, and decoded UserAssist entries.'
+    }
+    Devices = [ordered]@{
+        Function    = 'Get-ICDeviceEvidence'
+        Description = 'USB storage history, mounted devices, per-user mount points, portable devices, and the bounded device setup log.'
+    }
 }
 
 $script:ICConfigurationKeys = @(
@@ -99,6 +115,8 @@ $script:ICConfigurationKeys = @(
     'CollectSignedDrivers',
     'MaximumSignedDrivers',
     'MaximumFirewallRules',
+    'MaximumPrefetchFiles',
+    'MaximumArtifactFileBytes',
     'SpreadsheetSafeCsv',
     'MaximumArchiveEntries',
     'MaximumArchiveEntryBytes',
@@ -118,6 +136,8 @@ $script:ICConfigurationLimits = [ordered]@{
     MaximumWindowsUpdateHistory = [ordered]@{ Minimum = 1L; Maximum = 10000L }
     MaximumSignedDrivers        = [ordered]@{ Minimum = 1L; Maximum = 100000L }
     MaximumFirewallRules        = [ordered]@{ Minimum = 1L; Maximum = 100000L }
+    MaximumPrefetchFiles        = [ordered]@{ Minimum = 1L; Maximum = 4096L }
+    MaximumArtifactFileBytes    = [ordered]@{ Minimum = 65536L; Maximum = 1073741824L }
     MaximumArchiveEntries       = [ordered]@{ Minimum = 1L; Maximum = 50000L }
     MaximumArchiveEntryBytes    = [ordered]@{ Minimum = 1L; Maximum = 1099511627776L }
     MaximumArchiveExpandedBytes = [ordered]@{ Minimum = 1L; Maximum = 8796093022208L }

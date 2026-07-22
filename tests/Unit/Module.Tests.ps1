@@ -12,6 +12,7 @@ Describe 'IncidentCapsule module' {
     It 'exports exactly the supported public commands' {
         $commands = @(Get-Command -Module IncidentCapsule | Select-Object -ExpandProperty Name | Sort-Object)
         $commands | Should -Be @(
+            'Export-IncidentCapsuleData',
             'Get-IncidentCapsuleProfile',
             'Invoke-IncidentCapsule',
             'Test-IncidentCapsuleIntegrity',

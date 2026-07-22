@@ -29,6 +29,31 @@ Describe 'Incident Capsule configuration' {
             { Test-ICConfiguration -Configuration $configuration } | Should -Throw '*Unknown configuration key*'
         }
 
+        It 'provides bounded artifact defaults for every profile' {
+            foreach ($profileName in @('Minimal', 'Standard', 'Extended')) {
+                $configuration = Get-ICDefaultConfiguration -Profile $profileName
+                [int64]$configuration.MaximumPrefetchFiles | Should -BeGreaterThan 0
+                [int64]$configuration.MaximumArtifactFileBytes | Should -BeGreaterOrEqual 65536
+            }
+        }
+
+        It 'rejects invalid artifact bounds' {
+            $configuration = Get-ICDefaultConfiguration -Profile Standard
+            $configuration.MaximumPrefetchFiles = 0
+            { Test-ICConfiguration -Configuration $configuration } | Should -Throw '*must be between*'
+        }
+
+        It 'selects the new inventory collectors in every profile' {
+            foreach ($profileName in @('Minimal', 'Standard', 'Extended')) {
+                $configuration = Get-ICDefaultConfiguration -Profile $profileName
+                $configuration.Collectors | Should -Contain 'InstalledSoftware'
+                $configuration.Collectors | Should -Contain 'Certificates'
+            }
+            $standard = Get-ICDefaultConfiguration -Profile Standard
+            $standard.Collectors | Should -Contain 'ExecutionArtifacts'
+            $standard.Collectors | Should -Contain 'Devices'
+        }
+
         It 'rejects an unknown collector' {
             $configuration = Get-ICDefaultConfiguration -Profile Minimal
             $configuration.Collectors = @('System', 'ImaginaryCollector')

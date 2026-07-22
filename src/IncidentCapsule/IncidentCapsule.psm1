@@ -12,6 +12,7 @@ Get-ChildItem -LiteralPath $publicPath -Filter '*.ps1' -File |
     ForEach-Object { . $_.FullName }
 
 Export-ModuleMember -Function @(
+    'Export-IncidentCapsuleData',
     'Get-IncidentCapsuleProfile',
     'Invoke-IncidentCapsule',
     'Test-IncidentCapsuleReadiness',
