@@ -113,6 +113,39 @@ Describe 'Incident Capsule v1.2 collectors' -Skip:($env:OS -ne 'Windows_NT') {
 }
 
 
+Describe 'Incident Capsule AppCompatCache value normalization' {
+    It 'normalizes an object[] registry value to a real byte array without unrolling' {
+        InModuleScope IncidentCapsule {
+            $converted = ConvertTo-ICByteArray -Value ([object[]](0x41, 0x42, 0x43))
+            $converted -is [byte[]] | Should -BeTrue
+            $converted.Length | Should -Be 3
+            # A real byte[] must survive so WriteAllBytes can consume it.
+            $tmp = [System.IO.Path]::GetTempFileName()
+            try {
+                [System.IO.File]::WriteAllBytes($tmp, $converted)
+                (Get-Item $tmp).Length | Should -Be 3
+            }
+            finally { Remove-Item $tmp -Force -ErrorAction SilentlyContinue }
+        }
+    }
+
+    It 'passes a byte array through as a byte array' {
+        InModuleScope IncidentCapsule {
+            $converted = ConvertTo-ICByteArray -Value ([byte[]](1, 2, 3))
+            $converted -is [byte[]] | Should -BeTrue
+            $converted.Length | Should -Be 3
+        }
+    }
+
+    It 'rejects unconvertible values' {
+        InModuleScope IncidentCapsule {
+            ConvertTo-ICByteArray -Value 'text' | Should -BeNullOrEmpty
+            ConvertTo-ICByteArray -Value ([object[]]('a', 'b')) | Should -BeNullOrEmpty
+            ConvertTo-ICByteArray -Value $null | Should -BeNullOrEmpty
+        }
+    }
+}
+
 Describe 'Incident Capsule collector stability regressions' -Skip:($env:OS -ne 'Windows_NT') {
     It 'collects <Name> without a terminating failure in the current edition' -ForEach @(
         @{ Name = 'System' },

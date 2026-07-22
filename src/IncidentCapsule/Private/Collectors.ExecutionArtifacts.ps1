@@ -18,6 +18,30 @@ function ConvertFrom-ICRot13 {
     return -join $characters
 }
 
+function ConvertTo-ICByteArray {
+    [CmdletBinding()]
+    param(
+        [AllowNull()]
+        [object]$Value
+    )
+
+    if ($null -eq $Value) {
+        return $null
+    }
+    # The unary comma keeps the byte[] intact across the return: without it
+    # PowerShell enumerates the array and the caller receives object[], which is
+    # exactly why the AppCompatCache export was skipped on every host. A value
+    # that PowerShell already surfaced as object[] (observed with PowerShell 7.5
+    # on Windows 11) is cast rather than rejected.
+    if ($Value -is [byte[]]) {
+        return , $Value
+    }
+    if ($Value -is [System.Array]) {
+        try { return , ([byte[]]$Value) } catch { return $null }
+    }
+    return $null
+}
+
 function ConvertFrom-ICFileTimeUtc {
     [CmdletBinding()]
     param(
@@ -107,7 +131,8 @@ function Get-ICExecutionArtifactEvidence {
             CapsulePath = $null
         }
         $properties = Get-ItemProperty -LiteralPath $appCompatKey -ErrorAction Stop
-        $rawCache = Get-ICPropertyValue -InputObject $properties -Name 'AppCompatCache'
+        $rawValue = Get-ICPropertyValue -InputObject $properties -Name 'AppCompatCache'
+        $rawCache = ConvertTo-ICByteArray -Value $rawValue
         if ($rawCache -is [byte[]] -and $rawCache.Length -gt 0) {
             $binaryPath = Join-Path $Context.RootPath 'evidence\execution\appcompatcache.bin'
             [void][System.IO.Directory]::CreateDirectory((Split-Path -Parent $binaryPath))
@@ -119,14 +144,14 @@ function Get-ICExecutionArtifactEvidence {
             $appCompatRecord.CapsulePath = Get-ICRelativePath -BasePath $Context.RootPath -Path $binaryPath
         }
         else {
-            $reason = if ($null -eq $rawCache) {
+            $reason = if ($null -eq $rawValue) {
                 "value 'AppCompatCache' was not found under '$appCompatKey'"
             }
-            elseif ($rawCache -is [byte[]]) {
-                "value 'AppCompatCache' exists but is empty"
+            elseif ($null -eq $rawCache) {
+                "value 'AppCompatCache' has unconvertible type '$($rawValue.GetType().FullName)'"
             }
             else {
-                "value 'AppCompatCache' has unexpected type '$($rawCache.GetType().FullName)'"
+                "value 'AppCompatCache' exists but is empty"
             }
             Add-ICCollectorWarning -List $warnings -Message "AppCompatCache snapshot: $reason."
         }

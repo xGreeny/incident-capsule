@@ -4,6 +4,12 @@ All notable changes to Incident Capsule are documented in this file. The project
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-07-22
+
+### Fixed
+
+- The ExecutionArtifacts collector now exports the raw AppCompatCache (Shimcache) value instead of skipping it. The REG_BINARY value was enumerated to `object[]` before reaching the byte-array type check, so `appcompatcache.bin` was never written and `AppCompatCacheBytes` was always `0`. A new `ConvertTo-ICByteArray` helper normalizes the value and returns it without pipeline unrolling.
+
 ## [1.3.0] - 2026-07-22
 
 ### Added
@@ -145,6 +151,7 @@ All notable changes to Incident Capsule are documented in this file. The project
 - Pester tests, PSScriptAnalyzer integration, continuous integration, and tagged-release packaging.
 - Security, evidence-handling, architecture, configuration, and collector-reference documentation.
 
+[1.3.1]: https://github.com/xGreeny/incident-capsule/releases/tag/v1.3.1
 [1.3.0]: https://github.com/xGreeny/incident-capsule/releases/tag/v1.3.0
 [1.2.1]: https://github.com/xGreeny/incident-capsule/releases/tag/v1.2.1
 [1.2.0]: https://github.com/xGreeny/incident-capsule/releases/tag/v1.2.0

@@ -1,6 +1,6 @@
 @{
     RootModule        = 'IncidentCapsule.psm1'
-    ModuleVersion     = '1.3.0'
+    ModuleVersion     = '1.3.1'
     GUID              = 'f4f29bb2-65a6-4e50-8548-4547f4d4f9e6'
     Author            = 'xGreeny'
     CompanyName       = 'Community'
@@ -29,7 +29,7 @@
             )
             LicenseUri   = 'https://github.com/xGreeny/incident-capsule/blob/main/LICENSE'
             ProjectUri   = 'https://github.com/xGreeny/incident-capsule'
-            ReleaseNotes = 'Capsule comparison and event-collection tuning: Compare-IncidentCapsule diffs services, tasks, software, autoruns, accounts, certificates, and drivers between two capsules; bounded event-message length; optional event channels no longer mark collection partial when absent.'
+            ReleaseNotes = 'Fixes the AppCompatCache (Shimcache) export, which was skipped on every host because the REG_BINARY value was enumerated to object[] before the byte-array type check.'
         }
     }
 }
