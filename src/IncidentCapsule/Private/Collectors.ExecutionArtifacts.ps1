@@ -119,7 +119,16 @@ function Get-ICExecutionArtifactEvidence {
             $appCompatRecord.CapsulePath = Get-ICRelativePath -BasePath $Context.RootPath -Path $binaryPath
         }
         else {
-            Add-ICCollectorWarning -List $warnings -Message 'AppCompatCache value is unavailable or empty.'
+            $reason = if ($null -eq $rawCache) {
+                "value 'AppCompatCache' was not found under '$appCompatKey'"
+            }
+            elseif ($rawCache -is [byte[]]) {
+                "value 'AppCompatCache' exists but is empty"
+            }
+            else {
+                "value 'AppCompatCache' has unexpected type '$($rawCache.GetType().FullName)'"
+            }
+            Add-ICCollectorWarning -List $warnings -Message "AppCompatCache snapshot: $reason."
         }
         Add-ICOutputFiles -List $files -Path (Export-ICCollectorData -Context $Context -Collector ExecutionArtifacts -RelativePath 'evidence/execution/appcompatcache.json' -Data ([pscustomobject]$appCompatRecord))
     }

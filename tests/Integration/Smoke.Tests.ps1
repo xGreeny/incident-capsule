@@ -14,6 +14,7 @@ Describe 'Incident Capsule collection smoke test' -Skip:(-not $isWindowsHost) {
             -NoCompression
 
         $result.Status | Should -Not -Be 'Failed'
+        @($result.CollectorResults | Where-Object status -eq 'Failed') | Should -BeNullOrEmpty
         $result.CollectionStatus | Should -Be $result.Status
         $result.FinalizationStatus | Should -Be 'Verified'
         $result.IntegrityValid | Should -BeTrue
@@ -35,6 +36,7 @@ Describe 'Incident Capsule collection smoke test' -Skip:(-not $isWindowsHost) {
             -Collectors Processes,Services
 
         $result.Status | Should -Not -Be 'Failed'
+        @($result.CollectorResults | Where-Object status -eq 'Failed') | Should -BeNullOrEmpty
         $result.CollectionStatus | Should -Be $result.Status
         $result.FinalizationStatus | Should -Be 'Verified'
         $result.IntegrityValid | Should -BeTrue

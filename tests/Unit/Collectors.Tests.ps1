@@ -111,3 +111,34 @@ Describe 'Incident Capsule v1.2 collectors' -Skip:($env:OS -ne 'Windows_NT') {
         }
     }
 }
+
+
+Describe 'Incident Capsule collector stability regressions' -Skip:($env:OS -ne 'Windows_NT') {
+    It 'collects <Name> without a terminating failure in the current edition' -ForEach @(
+        @{ Name = 'System' },
+        @{ Name = 'ScheduledTasks' },
+        @{ Name = 'Sessions' }
+    ) {
+        $rootPath = Join-Path $TestDrive "regression-$Name"
+        InModuleScope IncidentCapsule -Parameters @{ RootPath = $rootPath; CollectorName = $Name } {
+            param($RootPath, $CollectorName)
+
+            New-Item -ItemType Directory -Path (Join-Path $RootPath 'logs') -Force | Out-Null
+            $context = [pscustomobject]@{
+                RootPath         = $RootPath
+                LogPath          = Join-Path $RootPath 'logs/collector.log'
+                Frozen           = $false
+                CapsuleId        = 'IC-REGRESSION'
+                HostName         = $env:COMPUTERNAME
+                IsElevated       = Test-ICAdministrator
+                Configuration    = Get-ICDefaultConfiguration -Profile Minimal
+                CollectorResults = New-Object System.Collections.ArrayList
+            }
+
+            $result = Invoke-ICCollector -Context $context -Name $CollectorName
+
+            $result.status | Should -BeIn @('Succeeded', 'Partial')
+            @($result.outputFiles).Count | Should -BeGreaterThan 0
+        }
+    }
+}

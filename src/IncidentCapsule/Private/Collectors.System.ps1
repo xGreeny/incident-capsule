@@ -127,10 +127,15 @@ function Get-ICSystemEvidence {
     }
     catch { Add-ICCollectorWarning -List $warnings -Message "Windows Time service: $($_.Exception.Message)" }
 
+    # Environment.TickCount64 exists only on .NET Core; Windows PowerShell 5.1
+    # must fall back without failing the collector.
+    $tickCount64 = $null
+    try { $tickCount64 = [int64][System.Environment]::TickCount64 } catch { $tickCount64 = $null }
+
     $timeData = [ordered]@{
         CapturedAtUtc = [datetime]::UtcNow.ToString('o')
         LocalTime = (Get-Date).ToString('o')
-        TickCount64 = [System.Environment]::TickCount64
+        TickCount64 = $tickCount64
         TimeZone = $timeZone
         WindowsTimeService = $w32Time
     }

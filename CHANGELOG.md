@@ -4,6 +4,21 @@ All notable changes to Incident Capsule are documented in this file. The project
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-07-22
+
+### Fixed
+
+- The System collector no longer fails completely under Windows PowerShell 5.1: `Environment.TickCount64` exists only on .NET Core and is now read with a safe fallback. The failure had been masked in CI because the smoke test accepted `CompletedWithErrors`.
+- The ScheduledTasks collector no longer loses all task evidence when one task exposes no `CimClass` metadata (observed on Windows Server 2025); task actions and triggers use strict-mode-safe property access and each task is isolated so one malformed task cannot erase the rest.
+- Logon-session records use strict-mode-safe access for `LogonServer`, which is absent from `Win32_LogonSession` on current Windows builds.
+- The AppCompatCache warning now states whether the registry value is missing, empty, or has an unexpected type.
+
+### Added
+
+- `capsule.json` records the PowerShell version and edition of the collecting session for diagnosability of edition-specific differences.
+- `channels.json` records per-channel query, EVTX-export, and total durations to make event-collection hotspots visible.
+- The CI smoke test now fails when any collector reports `Failed`, and stability regression tests run the System, ScheduledTasks, and Sessions collectors in both PowerShell editions.
+
 ## [1.2.0] - 2026-07-22
 
 ### Added
@@ -116,6 +131,7 @@ All notable changes to Incident Capsule are documented in this file. The project
 - Pester tests, PSScriptAnalyzer integration, continuous integration, and tagged-release packaging.
 - Security, evidence-handling, architecture, configuration, and collector-reference documentation.
 
+[1.2.1]: https://github.com/xGreeny/incident-capsule/releases/tag/v1.2.1
 [1.2.0]: https://github.com/xGreeny/incident-capsule/releases/tag/v1.2.0
 [1.1.1]: https://github.com/xGreeny/incident-capsule/releases/tag/v1.1.1
 [1.1.0]: https://github.com/xGreeny/incident-capsule/releases/tag/v1.1.0

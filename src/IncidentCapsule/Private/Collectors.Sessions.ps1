@@ -17,7 +17,7 @@ function Get-ICSessionEvidence {
                     LogonId = $_.LogonId
                     LogonType = $_.LogonType
                     AuthenticationPackage = $_.AuthenticationPackage
-                    LogonServer = $_.LogonServer
+                    LogonServer = Get-ICPropertyValue -InputObject $_ -Name 'LogonServer'
                     StartTimeUtc = ConvertTo-ICIso8601 -Value $_.StartTime
                 }
             } |

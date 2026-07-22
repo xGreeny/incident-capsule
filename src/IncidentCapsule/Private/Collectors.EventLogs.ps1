@@ -16,6 +16,9 @@ function Get-ICEventLogEvidence {
     $wevtutilPath = Get-ICSystemExecutable -Name 'wevtutil.exe'
 
     foreach ($logName in @($Context.Configuration.EventLogs)) {
+        $channelStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+        $queryMilliseconds = $null
+        $evtxExportMilliseconds = $null
         $safeBase = ConvertTo-ICSafeFileName -Value $logName -MaximumLength 80
         $digest = Get-ICShortHash -Value $logName -Length 8
         $fileBase = "$safeBase-$digest"
@@ -39,6 +42,7 @@ function Get-ICEventLogEvidence {
         $exportError = $null
 
         if ($available) {
+            $queryStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
             try {
                 $rawEvents = @(Get-WinEvent -FilterHashtable @{ LogName = $logName; StartTime = $startTime } -MaxEvents $Context.Configuration.MaximumEventsPerLog -ErrorAction Stop)
                 $events = @($rawEvents | ForEach-Object {
@@ -77,6 +81,10 @@ function Get-ICEventLogEvidence {
                     Add-ICCollectorWarning -List $warnings -Message "Event query '$logName': $queryError"
                 }
             }
+            finally {
+                $queryStopwatch.Stop()
+                $queryMilliseconds = [math]::Round($queryStopwatch.Elapsed.TotalMilliseconds, 0)
+            }
         }
 
         $summaryFiles = Export-ICCollectorData -Context $Context -Collector EventLogs -RelativePath $summaryJsonRelative -Data $events
@@ -104,6 +112,7 @@ function Get-ICEventLogEvidence {
         $eventTotal += $events.Count
 
         if ($available -and $Context.Configuration.ExportEvtx) {
+            $evtxStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
             $evtxRelative = "evidence/events/evtx/$fileBase.evtx"
             $evtxPath = Join-Path $Context.RootPath ($evtxRelative -replace '/', [System.IO.Path]::DirectorySeparatorChar)
             $evtxDirectory = Split-Path -Parent $evtxPath
@@ -128,6 +137,8 @@ function Get-ICEventLogEvidence {
                 $exportError = if ($null -ne $export.Error) { $export.Error } else { @($export.Output) -join ' | ' }
                 Add-ICCollectorWarning -List $warnings -Message "EVTX export '$logName': $exportError"
             }
+            $evtxStopwatch.Stop()
+            $evtxExportMilliseconds = [math]::Round($evtxStopwatch.Elapsed.TotalMilliseconds, 0)
         }
 
         [void]$channelRecords.Add([pscustomobject][ordered]@{
@@ -147,6 +158,9 @@ function Get-ICEventLogEvidence {
             Evtx = $evtxRelative
             QueryError = $queryError
             ExportError = $exportError
+            QueryMilliseconds = $queryMilliseconds
+            EvtxExportMilliseconds = $evtxExportMilliseconds
+            TotalMilliseconds = [math]::Round($channelStopwatch.Elapsed.TotalMilliseconds, 0)
         })
     }
 

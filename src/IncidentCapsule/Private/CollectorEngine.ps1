@@ -241,6 +241,10 @@ function New-ICCapsuleMetadata {
             operator        = $Context.Operator
             executionUser   = Get-ICCurrentUser
             elevated        = [bool]$Context.IsElevated
+            powerShell      = [ordered]@{
+                version = [string]$PSVersionTable.PSVersion
+                edition = [string]$PSVersionTable.PSEdition
+            }
             startedAtUtc    = $Context.StartedAtUtc.ToString('o')
             completedAtUtc  = $completed.ToString('o')
             durationSeconds = [math]::Round($duration, 3)
