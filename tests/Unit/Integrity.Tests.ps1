@@ -143,7 +143,8 @@ Describe 'Incident Capsule integrity manifest' {
 
         $receipt.Path | Should -Be "$($receipt.ArchivePath).verification.json"
         $document = Get-Content -LiteralPath $receipt.Path -Raw | ConvertFrom-Json
-        $document.'$schema' | Should -Match '/v1\.1\.0/docs/schemas/verification-receipt\.schema\.json$'
+        $moduleVersion = (Get-Module IncidentCapsule).Version.ToString()
+        $document.'$schema' | Should -Match ('/v{0}/docs/schemas/verification-receipt\.schema\.json$' -f [regex]::Escape($moduleVersion))
         $document.schemaVersion | Should -Be '1.1'
         $document.checksumListValid | Should -BeTrue
         $document.archiveHashValid | Should -BeTrue

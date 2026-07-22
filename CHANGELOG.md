@@ -4,6 +4,8 @@ All notable changes to Incident Capsule are documented in this file. The project
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-07-22
+
 ### Added
 
 - Unit tests for collector engine failure paths: terminating errors, missing result objects, out-of-root output files, and overall-status computation.
@@ -93,6 +95,7 @@ All notable changes to Incident Capsule are documented in this file. The project
 - Pester tests, PSScriptAnalyzer integration, continuous integration, and tagged-release packaging.
 - Security, evidence-handling, architecture, configuration, and collector-reference documentation.
 
+[1.1.1]: https://github.com/xGreeny/incident-capsule/releases/tag/v1.1.1
 [1.1.0]: https://github.com/xGreeny/incident-capsule/releases/tag/v1.1.0
 [1.0.1]: https://github.com/xGreeny/incident-capsule/releases/tag/v1.0.1
 [1.0.0]: https://github.com/xGreeny/incident-capsule/releases/tag/v1.0.0

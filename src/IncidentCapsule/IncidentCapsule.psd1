@@ -1,6 +1,6 @@
 @{
     RootModule        = 'IncidentCapsule.psm1'
-    ModuleVersion     = '1.1.0'
+    ModuleVersion     = '1.1.1'
     GUID              = 'f4f29bb2-65a6-4e50-8548-4547f4d4f9e6'
     Author            = 'xGreeny'
     CompanyName       = 'Community'
@@ -27,7 +27,7 @@
             )
             LicenseUri   = 'https://github.com/xGreeny/incident-capsule/blob/main/LICENSE'
             ProjectUri   = 'https://github.com/xGreeny/incident-capsule'
-            ReleaseNotes = 'Trustworthy finalization and safe handoff: readiness checks, bounded collection, structured coverage, derived timeline, hardened checksum and archive verification with receipts, and self-contained release packages.'
+            ReleaseNotes = 'Engine hardening: empty collector result sets no longer mask the original fatal error, out-of-root output warnings reach the collector log, and unit test coverage for engine failure paths and report generation is expanded.'
         }
     }
 }
