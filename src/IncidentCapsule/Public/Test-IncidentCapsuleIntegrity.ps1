@@ -28,7 +28,7 @@ function Test-IncidentCapsuleIntegrity {
     Maximum per-entry and aggregate ZIP compression ratio.
 
     .EXAMPLE
-    Test-IncidentCapsuleIntegrity -Path 'E:\Evidence\IC_IR-2026-0042_WS-042_20260712T184233Z.zip' -RequireSidecar
+    Test-IncidentCapsuleIntegrity -Path 'E:\Evidence\IC_IR-2026-0042_WS-042_20260712T184233Z_a1b2c3d4.zip' -RequireSidecar
 
     .EXAMPLE
     $result = Test-IncidentCapsuleIntegrity -Path $capsule.WorkingDirectory

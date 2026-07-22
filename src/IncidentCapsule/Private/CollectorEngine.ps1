@@ -59,7 +59,9 @@ function Invoke-ICCollector {
             [void]$relativeFiles.Add((Get-ICRelativePath -BasePath $Context.RootPath -Path $file))
         }
         catch {
-            $warnings += "Collector reported an output outside the capsule root: $file"
+            $warning = "Collector reported an output outside the capsule root: $file"
+            $warnings += $warning
+            Write-ICLog -Context $Context -Level WARN -Component $Name -Message $warning
             if ($status -eq 'Succeeded') {
                 $status = 'Partial'
             }
@@ -140,6 +142,7 @@ function Get-ICOverallStatus {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
+        [AllowEmptyCollection()]
         [object[]]$CollectorResults,
 
         [AllowNull()]

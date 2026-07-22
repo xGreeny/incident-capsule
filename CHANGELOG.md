@@ -4,6 +4,20 @@ All notable changes to Incident Capsule are documented in this file. The project
 
 ## [Unreleased]
 
+### Added
+
+- Unit tests for collector engine failure paths: terminating errors, missing result objects, out-of-root output files, and overall-status computation.
+- Unit tests for offline report generation: empty collector results, HTML encoding of evidence-derived values, metric rendering, and unsafe evidence-link omission.
+
+### Fixed
+
+- `Get-ICOverallStatus` no longer fails on an empty collector result set, which previously masked the original error when acquisition failed before the first collector completed.
+- A collector output file outside the capsule root is now recorded in `collector.log` in addition to the collector warnings.
+
+### Documentation
+
+- Aligned capsule directory and archive name examples with the actual naming scheme, which includes a random suffix.
+
 ## [1.1.0] - 2026-07-14
 
 ### Security

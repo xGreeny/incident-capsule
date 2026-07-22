@@ -22,7 +22,7 @@ It is built for the first minutes of an investigation: gather a defensible snaps
 A Standard collection creates an evidence directory and a ZIP archive:
 
 ```text
-IC_IR-2026-0042_WS-042_20260712T184233Z/
+IC_IR-2026-0042_WS-042_20260712T184233Z_a1b2c3d4/
 ├── analysis/
 │   ├── timeline.csv
 │   └── timeline.json
@@ -54,9 +54,9 @@ IC_IR-2026-0042_WS-042_20260712T184233Z/
 └── report/
     └── index.html
 
-IC_IR-2026-0042_WS-042_20260712T184233Z.zip
-IC_IR-2026-0042_WS-042_20260712T184233Z.zip.sha256
-IC_IR-2026-0042_WS-042_20260712T184233Z.zip.verification.json
+IC_IR-2026-0042_WS-042_20260712T184233Z_a1b2c3d4.zip
+IC_IR-2026-0042_WS-042_20260712T184233Z_a1b2c3d4.zip.sha256
+IC_IR-2026-0042_WS-042_20260712T184233Z_a1b2c3d4.zip.verification.json
 ```
 
 The report is self-contained and opens offline. JSON files use a common evidence envelope and remain the canonical structured evidence; large tabular datasets can also receive spreadsheet-safe CSV views. `coverage.json` makes missing, partial, skipped, and successful acquisition explicit. The bounded timeline is a derived navigation index with links back to source evidence, not a separate source or a security verdict. Every file in the capsule is listed in a SHA-256 manifest. The ZIP receives a separate sidecar checksum and an external machine-readable verification receipt after safe extraction and embedded-manifest verification.
@@ -204,7 +204,7 @@ Incident Capsule separates acquisition from verification:
 `Test-IncidentCapsuleIntegrity` checks missing, modified, and unexpected files and validates `manifest.sha256` against the JSON manifest. Archive verification rejects unsafe paths, reparse or symbolic-link metadata, duplicate or case-colliding entries, and excessive entry count, expanded size, or compression ratio before extraction, then verifies the embedded manifest. Use `-RequireSidecar` at handoff boundaries so a missing adjacent checksum fails verification.
 
 ```powershell
-$verification = Test-IncidentCapsuleIntegrity -Path 'E:\Evidence\IC_IR-2026-0042_WS-042_20260712T184233Z.zip' -RequireSidecar
+$verification = Test-IncidentCapsuleIntegrity -Path 'E:\Evidence\IC_IR-2026-0042_WS-042_20260712T184233Z_a1b2c3d4.zip' -RequireSidecar
 $verification | Format-List
 $verification.FileResults | Where-Object Status -ne 'Valid'
 ```
