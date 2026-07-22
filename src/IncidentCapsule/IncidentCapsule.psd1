@@ -1,6 +1,6 @@
 @{
     RootModule        = 'IncidentCapsule.psm1'
-    ModuleVersion     = '1.2.1'
+    ModuleVersion     = '1.3.0'
     GUID              = 'f4f29bb2-65a6-4e50-8548-4547f4d4f9e6'
     Author            = 'xGreeny'
     CompanyName       = 'Community'
@@ -10,6 +10,7 @@
     CompatiblePSEditions = @('Desktop', 'Core')
 
     FunctionsToExport = @(
+        'Compare-IncidentCapsule',
         'Export-IncidentCapsuleData',
         'Get-IncidentCapsuleProfile',
         'Invoke-IncidentCapsule',
@@ -28,7 +29,7 @@
             )
             LicenseUri   = 'https://github.com/xGreeny/incident-capsule/blob/main/LICENSE'
             ProjectUri   = 'https://github.com/xGreeny/incident-capsule'
-            ReleaseNotes = 'Field hardening: System collector works again under Windows PowerShell 5.1, ScheduledTasks survives malformed tasks with per-task isolation, precise session and AppCompatCache warnings, collecting-engine metadata in capsule.json, and per-channel event timings.'
+            ReleaseNotes = 'Capsule comparison and event-collection tuning: Compare-IncidentCapsule diffs services, tasks, software, autoruns, accounts, certificates, and drivers between two capsules; bounded event-message length; optional event channels no longer mark collection partial when absent.'
         }
     }
 }

@@ -363,7 +363,7 @@ function Read-ICValidatedManifest {
         throw "Manifest '$manifestPath' does not contain a schemaVersion."
     }
     $schemaVersion = [string](Get-ICPropertyValue -InputObject $manifest -Name 'schemaVersion')
-    if ($schemaVersion -notin @('1.0', '1.1', '1.2')) {
+    if ($schemaVersion -notin @('1.0', '1.1', '1.2', '1.3')) {
         throw "Manifest '$manifestPath' uses unsupported schema version '$schemaVersion'."
     }
     if (-not (Test-ICObjectProperty -InputObject $manifest -Name 'algorithm') -or [string]$manifest.algorithm -ne 'SHA-256') {

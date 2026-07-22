@@ -11,6 +11,9 @@ function Get-ICEventLogEvidence {
     $eventTotal = 0
     $availableCount = 0
     $evtxCount = 0
+    $truncatedMessages = 0
+    $optionalMissing = 0
+    $maximumMessageChars = [int](Get-ICPropertyValue -InputObject $Context.Configuration -Name 'MaximumEventMessageChars' -Default 8192)
     $startTime = (Get-Date).AddHours(-1 * [double]$Context.Configuration.EventLookbackHours)
     $milliseconds = [int64]$Context.Configuration.EventLookbackHours * 60L * 60L * 1000L
     $wevtutilPath = Get-ICSystemExecutable -Name 'wevtutil.exe'
@@ -24,6 +27,7 @@ function Get-ICEventLogEvidence {
         $fileBase = "$safeBase-$digest"
         $logInfo = $null
         $available = $false
+        $optional = $logName -in $script:ICOptionalEventLogs
 
         try {
             $logInfo = Get-WinEvent -ListLog $logName -ErrorAction Stop
@@ -31,7 +35,15 @@ function Get-ICEventLogEvidence {
             $availableCount++
         }
         catch {
-            Add-ICCollectorWarning -List $warnings -Message "Event channel '$logName' is unavailable: $($_.Exception.Message)"
+            if ($optional) {
+                # Expected absence of a third-party or feature-gated channel:
+                # record it as coverage information without a partial-inducing warning.
+                $optionalMissing++
+                Write-ICLog -Context $Context -Level INFO -Component EventLogs -Message "Optional event channel '$logName' is not present on this host; skipping."
+            }
+            else {
+                Add-ICCollectorWarning -List $warnings -Message "Event channel '$logName' is unavailable: $($_.Exception.Message)"
+            }
         }
 
         $events = @()
@@ -48,6 +60,12 @@ function Get-ICEventLogEvidence {
                 $events = @($rawEvents | ForEach-Object {
                     $message = $null
                     try { $message = $_.Message } catch { $message = "<message unavailable: $($_.Exception.Message)>" }
+                    $messageTruncated = $false
+                    if ($null -ne $message -and $message.Length -gt $maximumMessageChars) {
+                        $message = $message.Substring(0, $maximumMessageChars) + "...[truncated $($message.Length - $maximumMessageChars) chars]"
+                        $messageTruncated = $true
+                        $truncatedMessages++
+                    }
                     [pscustomobject][ordered]@{
                         TimeCreatedUtc = ConvertTo-ICIso8601 -Value $_.TimeCreated
                         Id = $_.Id
@@ -72,6 +90,7 @@ function Get-ICEventLogEvidence {
                         RelatedActivityId = [string]$_.RelatedActivityId
                         PayloadValues = @($_.Properties | ForEach-Object { $_.Value })
                         Message = $message
+                        MessageTruncated = $messageTruncated
                     }
                 })
             }
@@ -144,6 +163,7 @@ function Get-ICEventLogEvidence {
         [void]$channelRecords.Add([pscustomobject][ordered]@{
             LogName = $logName
             Available = $available
+            Optional = $optional
             IsEnabled = if ($null -ne $logInfo) { $logInfo.IsEnabled } else { $null }
             RecordCount = if ($null -ne $logInfo) { $logInfo.RecordCount } else { $null }
             LogMode = if ($null -ne $logInfo) { [string]$logInfo.LogMode } else { $null }
@@ -169,9 +189,12 @@ function Get-ICEventLogEvidence {
     return New-ICCollectorResultData -OutputFiles @($files) -Warnings @($warnings) -Metrics ([ordered]@{
         ConfiguredChannels = @($Context.Configuration.EventLogs).Count
         AvailableChannels = $availableCount
+        OptionalChannelsMissing = $optionalMissing
         DecodedEvents = $eventTotal
+        TruncatedMessages = $truncatedMessages
         EvtxFiles = $evtxCount
         LookbackHours = $Context.Configuration.EventLookbackHours
         MaximumEventsPerLog = $Context.Configuration.MaximumEventsPerLog
+        MaximumEventMessageChars = $maximumMessageChars
     })
 }

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/xGreeny/incident-capsule/v1.2.0/docs/schemas/manifest.schema.json",
+  "$id": "https://raw.githubusercontent.com/xGreeny/incident-capsule/v1.3.0/docs/schemas/manifest.schema.json",
   "title": "Incident Capsule file manifest",
   "type": "object",
   "required": [
@@ -16,7 +16,7 @@
     },
     "schemaVersion": {
       "type": "string",
-      "enum": ["1.0", "1.1", "1.2"]
+      "enum": ["1.0", "1.1", "1.2", "1.3"]
     },
     "capsuleId": {
       "type": "string"

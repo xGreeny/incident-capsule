@@ -145,7 +145,7 @@ Describe 'Incident Capsule integrity manifest' {
         $document = Get-Content -LiteralPath $receipt.Path -Raw | ConvertFrom-Json
         $moduleVersion = (Get-Module IncidentCapsule).Version.ToString()
         $document.'$schema' | Should -Match ('/v{0}/docs/schemas/verification-receipt\.schema\.json$' -f [regex]::Escape($moduleVersion))
-        $document.schemaVersion | Should -Be '1.2'
+        $document.schemaVersion | Should -Be (InModuleScope IncidentCapsule { $script:ICSchemaVersion })
         $document.checksumListValid | Should -BeTrue
         $document.archiveHashValid | Should -BeTrue
     }

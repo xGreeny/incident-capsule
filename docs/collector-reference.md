@@ -205,7 +205,7 @@ All paths below are relative to the capsule root. JSON files use the common coll
 
 **Decoded fields:** time, event ID, level, provider, machine, user SID, record ID, task, opcode, keywords, and message.
 
-**Notes:** decoded messages can be locale-dependent and can contain sensitive data. EVTX export uses the profile's lookback query and does not clear or mutate the source channel. An export larger than `MaximumEvtxBytesPerLog` is removed and reported as a structured limit issue rather than retained outside the declared budget.
+**Notes:** decoded messages can be locale-dependent and can contain sensitive data. A decoded message longer than `MaximumEventMessageChars` is truncated with a `MessageTruncated` flag; the native EVTX export retains the full message. Channels that depend on a third-party agent or optional Windows feature (`Microsoft-Windows-Sysmon/Operational`, `OpenSSH/Operational`, `Microsoft-Windows-PrintService/Operational`) are optional: their absence is recorded as informational coverage rather than a warning that marks the collector partial. EVTX export uses the profile's lookback query and does not clear or mutate the source channel. An export larger than `MaximumEvtxBytesPerLog` is removed and reported as a structured limit issue rather than retained outside the declared budget.
 
 ## InstalledSoftware
 
@@ -273,3 +273,20 @@ Every completed capsule also contains:
 - `analysis/timeline.json` and `analysis/timeline.csv`, which provide a bounded chronological index derived from timestamped structured evidence.
 
 The timeline is a navigation aid, not a new evidence source. Each row retains the collector, source file, source property, and source index needed to return to the original JSON envelope.
+
+## Capsule comparison
+
+`Compare-IncidentCapsule` is a post-collection command, not a collector. It diffs two capsule directories of the same host and writes a `comparison.json` report outside both capsules. The comparison covers a curated set of stable evidence types keyed by a stable identity:
+
+| Section | Source | Identity |
+|---|---|---|
+| Services | `evidence/services/services.json` | `Name` |
+| ScheduledTasks | `evidence/scheduled-tasks/tasks.json` | `TaskPath` + `TaskName` |
+| InstalledSoftware | `evidence/software/installed-software.json` | `Scope` + `KeyName` |
+| RegistryAutoruns | `evidence/persistence/registry-autoruns.json` | `Key` + `ValueName` |
+| LocalUsers | `evidence/identities/local-users.json` | `SID` |
+| LocalGroups | `evidence/identities/local-groups.json` | `SID` |
+| Certificates | `evidence/certificates/certificate-stores.json` | `Store` + `Thumbprint` |
+| SystemDrivers | `evidence/drivers/system-drivers.json` | `Name` |
+
+Each section reports added, removed, and changed records, with per-field before/after values for changes. A section whose source file is missing or unreadable in either capsule is reported as not comparable rather than as a change. Volatile evidence (processes, live network endpoints, event summaries, timeline) is intentionally excluded.

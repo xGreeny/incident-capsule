@@ -93,6 +93,7 @@ function Get-ICDefaultConfiguration {
                 CollectSignedDrivers         = $false
                 MaximumSignedDrivers         = 2500
                 MaximumFirewallRules         = 2000
+                MaximumEventMessageChars     = 4096
                 MaximumPrefetchFiles         = 256
                 MaximumArtifactFileBytes     = 8388608L
             }
@@ -122,6 +123,7 @@ function Get-ICDefaultConfiguration {
                 CollectSignedDrivers         = $false
                 MaximumSignedDrivers         = 5000
                 MaximumFirewallRules         = 5000
+                MaximumEventMessageChars     = 8192
                 MaximumPrefetchFiles         = 512
                 MaximumArtifactFileBytes     = 33554432L
             }
@@ -151,6 +153,7 @@ function Get-ICDefaultConfiguration {
                 CollectSignedDrivers         = $true
                 MaximumSignedDrivers         = 10000
                 MaximumFirewallRules         = 10000
+                MaximumEventMessageChars     = 16384
                 MaximumPrefetchFiles         = 1024
                 MaximumArtifactFileBytes     = 134217728L
             }

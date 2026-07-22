@@ -4,6 +4,20 @@ All notable changes to Incident Capsule are documented in this file. The project
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-07-22
+
+### Added
+
+- `Compare-IncidentCapsule` diffs two capsule directories of the same host across a curated set of stable evidence types (services, scheduled tasks, installed software, autorun registry values, local users and groups, certificate trust stores, and system drivers), reporting added, removed, and changed records keyed by a stable identity. The JSON comparison report is written outside both sealed capsules.
+- `MaximumEventMessageChars` configuration bound with per-profile defaults; decoded event summaries truncate over-long messages (recording `MessageTruncated` per event and a `TruncatedMessages` metric) while native EVTX exports stay complete.
+- `channels.json` records the `Optional` flag per channel, and the EventLogs metrics report `OptionalChannelsMissing` and `TruncatedMessages`.
+- Comparison-report schema (`comparison.schema.json`).
+
+### Changed
+
+- Event channels that depend on a third-party agent or optional Windows feature (`Microsoft-Windows-Sysmon/Operational`, `OpenSSH/Operational`, `Microsoft-Windows-PrintService/Operational`) are treated as optional: their absence is reported as informational coverage (`EVENT_LOG_OPTIONAL_ABSENT` in readiness) instead of a warning that marks the EventLogs collector partial.
+- Schema version 1.3 for capsule metadata, collector envelopes, manifests, coverage, timelines, and verification receipts; 1.0 through 1.2 inputs remain accepted.
+
 ## [1.2.1] - 2026-07-22
 
 ### Fixed
@@ -131,6 +145,7 @@ All notable changes to Incident Capsule are documented in this file. The project
 - Pester tests, PSScriptAnalyzer integration, continuous integration, and tagged-release packaging.
 - Security, evidence-handling, architecture, configuration, and collector-reference documentation.
 
+[1.3.0]: https://github.com/xGreeny/incident-capsule/releases/tag/v1.3.0
 [1.2.1]: https://github.com/xGreeny/incident-capsule/releases/tag/v1.2.1
 [1.2.0]: https://github.com/xGreeny/incident-capsule/releases/tag/v1.2.0
 [1.1.1]: https://github.com/xGreeny/incident-capsule/releases/tag/v1.1.1

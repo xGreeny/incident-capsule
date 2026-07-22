@@ -286,10 +286,16 @@ function Get-ICEventLogReadinessCheck {
 
     $checks = New-Object System.Collections.ArrayList
     foreach ($logName in @($Configuration.EventLogs)) {
+        $optional = $logName -in $script:ICOptionalEventLogs
         try {
             $logInfo = Get-WinEvent -ListLog $logName -ErrorAction Stop | Select-Object -First 1
             if ($null -eq $logInfo) {
-                [void]$checks.Add((New-ICReadinessCheck -Code 'EVENT_LOG_UNAVAILABLE' -Category EventLogs -Status Warning -Severity Warning -Message "Event channel '$logName' was not found." -Details ([pscustomobject][ordered]@{ EventLog = $logName })))
+                if ($optional) {
+                    [void]$checks.Add((New-ICReadinessCheck -Code 'EVENT_LOG_OPTIONAL_ABSENT' -Category EventLogs -Status Passed -Severity Information -Message "Optional event channel '$logName' is not present; collection will skip it." -Details ([pscustomobject][ordered]@{ EventLog = $logName; Optional = $true })))
+                }
+                else {
+                    [void]$checks.Add((New-ICReadinessCheck -Code 'EVENT_LOG_UNAVAILABLE' -Category EventLogs -Status Warning -Severity Warning -Message "Event channel '$logName' was not found." -Details ([pscustomobject][ordered]@{ EventLog = $logName })))
+                }
                 continue
             }
 
@@ -334,6 +340,10 @@ function Get-ICEventLogReadinessCheck {
             }
         }
         catch {
+            if ($optional -and -not (Test-ICAccessDeniedError -ErrorRecord $_)) {
+                [void]$checks.Add((New-ICReadinessCheck -Code 'EVENT_LOG_OPTIONAL_ABSENT' -Category EventLogs -Status Passed -Severity Information -Message "Optional event channel '$logName' is not present; collection will skip it." -Details ([pscustomobject][ordered]@{ EventLog = $logName; Optional = $true })))
+                continue
+            }
             $code = 'EVENT_LOG_UNAVAILABLE'
             $message = "Event channel '$logName' is unavailable."
             if (Test-ICAccessDeniedError -ErrorRecord $_) {

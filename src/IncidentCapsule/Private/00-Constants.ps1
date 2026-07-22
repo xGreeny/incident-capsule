@@ -4,13 +4,14 @@ $moduleManifestData = Import-PowerShellDataFile -LiteralPath $moduleManifestPath
 
 $script:ICName = 'Incident Capsule'
 $script:ICVersion = [string]$moduleManifestData.ModuleVersion
-$script:ICSchemaVersion = '1.2'
+$script:ICSchemaVersion = '1.3'
 $script:ICCollectorSchema = "https://raw.githubusercontent.com/xGreeny/incident-capsule/v$($script:ICVersion)/docs/schemas/collector-envelope.schema.json"
 $script:ICCapsuleSchema = "https://raw.githubusercontent.com/xGreeny/incident-capsule/v$($script:ICVersion)/docs/schemas/capsule.schema.json"
 $script:ICManifestSchema = "https://raw.githubusercontent.com/xGreeny/incident-capsule/v$($script:ICVersion)/docs/schemas/manifest.schema.json"
 $script:ICCoverageSchema = "https://raw.githubusercontent.com/xGreeny/incident-capsule/v$($script:ICVersion)/docs/schemas/coverage.schema.json"
 $script:ICTimelineSchema = "https://raw.githubusercontent.com/xGreeny/incident-capsule/v$($script:ICVersion)/docs/schemas/timeline.schema.json"
 $script:ICVerificationReceiptSchema = "https://raw.githubusercontent.com/xGreeny/incident-capsule/v$($script:ICVersion)/docs/schemas/verification-receipt.schema.json"
+$script:ICComparisonSchema = "https://raw.githubusercontent.com/xGreeny/incident-capsule/v$($script:ICVersion)/docs/schemas/comparison.schema.json"
 
 $script:ICCollectorDefinitions = [ordered]@{
     System = [ordered]@{
@@ -91,6 +92,15 @@ $script:ICCollectorDefinitions = [ordered]@{
     }
 }
 
+# Event channels that are commonly absent because they depend on a third-party
+# agent or an optional Windows feature. Their absence is expected and is
+# reported as Info coverage rather than a warning that marks EventLogs partial.
+$script:ICOptionalEventLogs = @(
+    'Microsoft-Windows-Sysmon/Operational',
+    'OpenSSH/Operational',
+    'Microsoft-Windows-PrintService/Operational'
+)
+
 $script:ICConfigurationKeys = @(
     'Collectors',
     'EventLogs',
@@ -115,6 +125,7 @@ $script:ICConfigurationKeys = @(
     'CollectSignedDrivers',
     'MaximumSignedDrivers',
     'MaximumFirewallRules',
+    'MaximumEventMessageChars',
     'MaximumPrefetchFiles',
     'MaximumArtifactFileBytes',
     'SpreadsheetSafeCsv',
@@ -136,6 +147,7 @@ $script:ICConfigurationLimits = [ordered]@{
     MaximumWindowsUpdateHistory = [ordered]@{ Minimum = 1L; Maximum = 10000L }
     MaximumSignedDrivers        = [ordered]@{ Minimum = 1L; Maximum = 100000L }
     MaximumFirewallRules        = [ordered]@{ Minimum = 1L; Maximum = 100000L }
+    MaximumEventMessageChars    = [ordered]@{ Minimum = 256L; Maximum = 1048576L }
     MaximumPrefetchFiles        = [ordered]@{ Minimum = 1L; Maximum = 4096L }
     MaximumArtifactFileBytes    = [ordered]@{ Minimum = 65536L; Maximum = 1073741824L }
     MaximumArchiveEntries       = [ordered]@{ Minimum = 1L; Maximum = 50000L }

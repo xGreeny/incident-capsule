@@ -218,6 +218,7 @@ function Get-ICResourceLimit {
         'MaximumWindowsUpdateHistory',
         'MaximumSignedDrivers',
         'MaximumFirewallRules',
+        'MaximumEventMessageChars',
         'MaximumPrefetchFiles',
         'MaximumArtifactFileBytes',
         'MaximumCapsuleBytes',

@@ -54,7 +54,7 @@ Describe 'Incident Capsule structured coverage' {
             $coverage.issues.code | Should -Contain 'LIMIT_REACHED'
             @($coverage.issues | Where-Object code -eq 'LIMIT_REACHED').Count | Should -Be 1
             ($coverage.issues | Where-Object code -eq 'LIMIT_REACHED').details.MaximumEvents | Should -Be 250
-            $coverage.schemaVersion | Should -Be '1.2'
+            $coverage.schemaVersion | Should -Be $script:ICSchemaVersion
         }
     }
 

@@ -41,6 +41,7 @@ ExcludeCollector removes names
 | `CollectSignedDrivers` | Boolean | Export signed PnP driver inventory |
 | `MaximumSignedDrivers` | positive integer | Upper bound for signed-driver rows |
 | `MaximumFirewallRules` | positive integer | Upper bound for exported firewall-rule metadata |
+| `MaximumEventMessageChars` | positive integer | Maximum characters retained per decoded event message in summaries; native EVTX exports are unaffected |
 | `MaximumPrefetchFiles` | positive integer | Maximum prefetch files copied by the ExecutionArtifacts collector |
 | `MaximumArtifactFileBytes` | positive integer | Per-file byte bound for copied artifact files (prefetch files, `setupapi.dev.log`) |
 | `SpreadsheetSafeCsv` | Boolean | Prefix potentially active spreadsheet formulas in derived CSV views; JSON remains unchanged |

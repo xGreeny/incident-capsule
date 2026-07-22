@@ -250,6 +250,16 @@ $export | Format-List
 Export-IncidentCapsuleData -Path $result.WorkingDirectory -Collector Processes,Network -DestinationPath 'E:\Evidence\network-triage.jsonl'
 ```
 
+## Baseline comparison
+
+`Compare-IncidentCapsule` diffs two capsules of the same host and reports what changed across a curated set of stable evidence types — services, scheduled tasks, installed software, autorun registry values, local users and groups, certificate trust stores, and system drivers. Volatile evidence (processes, live network endpoints, event summaries, timeline) is intentionally excluded so persistence-, account-, and inventory-level change stands out. The JSON report is written outside both sealed capsules:
+
+```powershell
+$comparison = Compare-IncidentCapsule -BaselinePath $baseline.WorkingDirectory -CurrentPath $incident.WorkingDirectory
+$comparison | Format-List TotalAdded,TotalRemoved,TotalChanged,ReportPath
+$comparison.Sections | Where-Object addedCount -gt 0 | Select-Object label,addedCount,removedCount,changedCount
+```
+
 ## Safety properties
 
 Incident Capsule is intentionally constrained:

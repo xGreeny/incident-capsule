@@ -25,7 +25,7 @@ Describe 'Incident Capsule v1.2 collectors' -Skip:($env:OS -ne 'Windows_NT') {
             $result.outputFiles | Should -Contain 'evidence/software/installed-software.json'
             $envelope = Get-Content -LiteralPath (Join-Path $RootPath 'evidence/software/installed-software.json') -Raw | ConvertFrom-Json
             $envelope.collector | Should -Be 'InstalledSoftware'
-            $envelope.schemaVersion | Should -Be '1.2'
+            $envelope.schemaVersion | Should -Be $script:ICSchemaVersion
             @($envelope.data).Count | Should -BeGreaterThan 0
         }
     }

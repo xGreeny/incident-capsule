@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/xGreeny/incident-capsule/v1.2.0/docs/schemas/timeline.schema.json",
+  "$id": "https://raw.githubusercontent.com/xGreeny/incident-capsule/v1.3.0/docs/schemas/timeline.schema.json",
   "title": "Incident Capsule derived timeline",
   "type": "object",
   "required": [
@@ -20,7 +20,7 @@
   ],
   "properties": {
     "$schema": { "type": "string", "format": "uri" },
-    "schemaVersion": { "type": "string", "enum": ["1.1", "1.2"] },
+    "schemaVersion": { "type": "string", "enum": ["1.1", "1.2", "1.3"] },
     "capsuleId": { "type": "string", "minLength": 1 },
     "generatedAtUtc": { "type": "string", "format": "date-time" },
     "sourceFiles": { "type": "integer", "minimum": 0 },
