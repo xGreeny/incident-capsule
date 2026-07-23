@@ -1,6 +1,8 @@
 # Incident Capsule
 
 [![CI](https://github.com/xGreeny/incident-capsule/actions/workflows/ci.yml/badge.svg)](https://github.com/xGreeny/incident-capsule/actions/workflows/ci.yml)
+[![PowerShell Gallery](https://img.shields.io/powershellgallery/v/IncidentCapsule.svg?label=PSGallery&color=5391FE)](https://www.powershellgallery.com/packages/IncidentCapsule)
+[![PSGallery downloads](https://img.shields.io/powershellgallery/dt/IncidentCapsule.svg)](https://www.powershellgallery.com/packages/IncidentCapsule)
 [![PowerShell 5.1+](https://img.shields.io/badge/PowerShell-5.1%2B-5391FE?logo=powershell&logoColor=white)](https://github.com/xGreeny/incident-capsule)
 [![License: MIT](https://img.shields.io/badge/License-MIT-2ea44f.svg)](LICENSE)
 
